@@ -35,4 +35,10 @@
 #study-action-dialog [hidden],#study-actions [hidden]{display:none!important}
 #audio-recovery{width:min(560px,calc(100vw - 24px));box-sizing:border-box;max-height:calc(100dvh - 32px);overflow:auto}
 #audio-recovery button{min-height:44px}
+#audio-recovery{font-size:14px;line-height:1.5}
+#audio-recovery h2{font-size:24px}
+#audio-relay-start{display:block;width:100%;background:#274e3b;color:white;font-size:16px;margin:12px 0}
+#audio-relay-progress{width:100%;margin:10px 0}
+#audio-recovery [hidden]{display:none!important}
+#audio-recovery details{margin-top:16px}
 @media(max-width:700px){#audio-recovery input{max-width:100%;font-size:16px}#study-actions{margin:0 12px 12px;padding:12px}.study-action-buttons{width:100%}.study-action-buttons button{flex:1}.study-language-grid{grid-template-columns:1fr}.study-dialog-actions button{flex:1 1 180px}#study-action-dialog{padding:16px}}

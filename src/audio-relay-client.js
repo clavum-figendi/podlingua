@@ -1,0 +1,8 @@
+import {fetchMedia} from './library-services.js';
+export const AUDIO_RELAY_ENDPOINT='https://paloma.dragonfish-reedfish.ts.net/podlingua-audio/fetch';
+export function supportsAudioRelay(value){try{const u=new URL(value);return u.protocol==='https:'&&!u.username&&!u.password&&!u.hash&&(!u.port||u.port==='443')&&['audio.podigee-cdn.net','adswizz.podigee-cdn.net'].includes(u.hostname)&&/\.(mp3|m4a|ogg|wav|opus|flac)$/i.test(u.pathname);}catch{return false;}}
+export async function fetchRelayAudio(url,{consent=false,signal,onProgress,maxMB=100,fetchFn=fetch}={}){
+ if(!consent)throw new Error('Permission is required to send this recording URL through the Podlingua relay.');
+ if(!supportsAudioRelay(url))throw new Error('This publisher is not supported by the Podlingua relay yet.');
+ let relayError;try{return await fetchMedia(url,{signal,onProgress,maxMB:Math.min(maxMB,100),fetchFn:async(_,options)=>{const response=await fetchFn(AUDIO_RELAY_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url}),signal:options.signal,credentials:'omit',referrerPolicy:'no-referrer',redirect:'error'});if(response.status===429)relayError=new Error('The shared audio relay is busy or has reached its safety allowance. Try later, or save the publisher audio manually.');else if(!response.ok)relayError=new Error(`The audio relay could not retrieve this recording (HTTP ${response.status}). Try the publisher download instead.`);return response;}});}catch(error){throw relayError||error;}
+}
