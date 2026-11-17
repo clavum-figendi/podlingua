@@ -25,8 +25,8 @@ export async function fetchMedia(url,{signal,maxMB=200,onProgress=()=>{},fetchFn
     return new Blob(chunks,{type:response.headers.get('Content-Type')?.split(';')[0]||'application/octet-stream'});
   }finally{clearTimeout(timer);signal?.removeEventListener('abort',abort);}
 }
-const allowedSettings=['skipBack','skipForward','defaultSpeed','followQueue','skipCompleted','autoDeletePlayed','enqueueDownloaded','autoDownload','autoDownloadLimit','refreshMinutes','maxDownloadMB','proxy','allowProxy','theme','includeExplicit','rememberPosition','country'];
-const subscriptionFields=['id','url','title','description','author','image','link','language','explicit','tags','speed','skipIntro','skipOutro','autoDownload','createdAt','updatedAt','lastRefresh','lastError','titleOverride','keepUpdated'];
+const allowedSettings=['skipBack','skipForward','defaultSpeed','followQueue','skipCompleted','autoDeletePlayed','enqueueDownloaded','autoDownload','autoDownloadLimit','refreshMinutes','maxDownloadMB','proxy','allowProxy','theme','includeExplicit','rememberPosition','country','queueLocked','queueKeepSorted','queueSort','enqueuePosition'];
+const subscriptionFields=['id','url','title','description','author','image','link','language','explicit','tags','speed','skipIntro','skipOutro','autoDownload','createdAt','updatedAt','lastRefresh','lastError','titleOverride','keepUpdated','downloadInclude','downloadExclude','newEpisodeAction'];
 const pick=(obj,fields)=>Object.fromEntries(fields.filter(k=>Object.hasOwn(obj,k)).map(k=>[k,obj[k]]));
 export const MAX_BACKUP_AUDIO_BYTES=512*1024*1024;
 export const backupEntryByteLimit=name=>name==='library.json'?50*1024*1024:/^audio\/\d+\.bin$/.test(name)?MAX_BACKUP_AUDIO_BYTES:0;
@@ -82,7 +82,7 @@ export async function downloadEpisode(id,{signal,onProgress}={}){
     const audio=await fetchMedia(before.audioUrl,{signal,onProgress,maxMB:Number(state.settings?.maxDownloadMB)||100,proxy:state.settings?.proxy,allowProxy:state.settings?.allowProxy});
     const after=await getEpisode(id);if(!after||after.audioUrl!==before.audioUrl)throw new Error('Episode was deleted or its media URL changed during download.');
     const saved=await saveEpisode({...after,audio,downloadedAt:Date.now()});
-    const fresh=await catalog.getAppState();await catalog.setAppState({downloadLog:[...(fresh.downloadLog||[]),{episodeId:id,title:saved.title,at:Date.now(),status:'complete',message:'Saved to browser storage'}].slice(-1000),...(fresh.settings?.enqueueDownloaded?{queue:[...new Set([...(fresh.queue||[]),id])]}:{})});
+    const {reduceQueue}=await import('./parity.js'),rows=await (await import('./storage.js')).listEpisodes();await catalog.mutateAppState(fresh=>({...fresh,downloadLog:[...(fresh.downloadLog||[]),{episodeId:id,title:saved.title,at:Date.now(),status:'complete'}].slice(-1000),...(fresh.settings?.enqueueDownloaded?{queue:reduceQueue(fresh,{type:'add',ids:[id],automatic:true,currentId:fresh.lastEpisodeId},rows)}:{})}));
     window.dispatchEvent(new Event('podlingua:library'));return saved;
   }catch(error){
     const fresh=await catalog.getAppState();await catalog.setAppState({downloadLog:[...(fresh.downloadLog||[]),{episodeId:id,title:before.title,at:Date.now(),status:'failed',message:error.name==='AbortError'?'Cancelled':error.message}].slice(-1000)});throw error;

@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 
-test.use({ baseURL: 'http://127.0.0.1:4173/podlingua/' });
+
 const transcript = { language: 'en', targetLanguage: 'fr', provider: 'import', segments: [{ start: 0, end: 2, text: 'Learning begins with listening.', translation: 'Apprendre commence par écouter.', speaker: 'Ada', words: [{ start: 0, end: .6, text: 'Learning' }, { start: .6, end: 1, text: 'begins' }, { start: 1, end: 1.4, text: 'with' }, { start: 1.4, end: 2, text: 'listening.' }] }, { start: 3, end: 5, text: 'A second perspective.', translation: 'Une autre perspective.' }] };
 async function importDoc(page) {
   await page.goto('/podlingua/');
@@ -60,8 +60,8 @@ test('audio persists, transcript attaches, measured words synchronize without ta
   await expect.poll(()=>page.locator('#audio').evaluate(a=>a.duration)).toBe(6);
 });
 
-test('settings have separate session keys and changing them sends no requests',async({page})=>{
-  let external=0;page.on('request',r=>{if(!r.url().startsWith('http://127.0.0.1:4173')&&!r.url().startsWith('blob:'))external++;});
+test('settings have separate session keys and changing them sends no requests',async({page,baseURL})=>{
+  let external=0;page.on('request',r=>{if(new URL(r.url()).origin!==new URL(baseURL).origin&&!r.url().startsWith('blob:'))external++;});
   await page.goto('/podlingua/');
   await page.getByRole('button',{name:'Engine settings'}).click();
   await expect(page.locator('#cloud-consent')).not.toBeChecked();
@@ -140,8 +140,8 @@ test('lookup consent errors are visible in the popup without a network request',
   await importDoc(page);await page.locator('.original .word').first().click();
   await expect(page.locator('#lookup-result')).toContainText('consent');
 });
-test('unofficial status and provider-side spending-cap limitation are visible',async({page})=>{
- await page.goto('/podlingua/');await expect(page.locator('.main-footer')).toContainText('unofficial AntennaPod');
+test('credits remain accessible and provider spending controls remain explicit',async({page})=>{
+ await page.goto('/podlingua/');await expect(page.locator('.main-footer')).toContainText('Credits & licenses');
  await page.getByRole('button',{name:'Engine settings'}).click();await expect(page.locator('#settings')).toContainText('hard spending limits');
 });
 test('a second tab can replace a transcript without a pending first-tab result overwriting it',async({page,context})=>{

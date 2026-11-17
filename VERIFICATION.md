@@ -2,15 +2,17 @@
 
 ## Executed locally against the production Vite build
 
-- `npm test`: 59 passing Node tests (document parsing/validation/export, Android JSON compatibility, overlap, Unicode tokenization, IndexedDB audio persistence and credential exclusion, provider request/response contracts, consent and URL validation, native ASR upload/poll seams, word punctuation/speaker fidelity, local-worker factory contracts).
+- `npm test`: 67 passing Node tests (document parsing/validation/export, Android JSON compatibility, overlap, Unicode tokenization, IndexedDB audio persistence and credential exclusion, provider request/response contracts, consent and URL validation, native ASR upload/poll seams, word punctuation/speaker fidelity, local-worker factory contracts).
 - `npm run build`: successful production build with GitHub Pages `/podlingua/` base and dedicated module worker.
-- `npm run test:ui`: 27 passing Chromium Playwright tests. Exercises actual UI/import/audio playback/seek/synchronization/export/reload/library persistence, responsiveness at 390px, RTL, HTML-injection inertness, consent, nonpersistent keys, Google attribution independent of current settings, sequential queues, cancellation and stale result replacement/deletion.
+- `npm run test:ui`: 34 passing Chromium Playwright tests covering the expanded production interface. Exercises actual UI/import/audio playback/seek/synchronization/export/reload/library persistence, responsiveness at 390px, RTL, HTML-injection inertness, consent, nonpersistent keys, Google attribution independent of current settings, sequential queues, cancellation and stale result replacement/deletion.
 - `npm audit`: zero reported vulnerabilities at verification time. This is not a comprehensive security certification.
 - Credential-pattern scan over source/public/scripts/tests: no matches for GitHub/OpenAI-style live token patterns or private-key blocks. Test-only placeholder keys remain in explicitly mocked tests.
 
 ## Integrated standalone podcast workflows
 
-The current expanded production build passed all 27 Chromium tests, including real local media playback/resume/bookmark seek/sleep timer, publisher transcript and chapter loading, audio-inclusive ZIP export, routed discovery/RSS subscription and refresh, OPML, persistent catalog/queue state, settings, explicit HTML inertness, 390px layout and original reader regressions. Node coverage now also includes feed/OPML/chapter parsers, subscription merge/deduplication, metadata persistence, bounded media and audio-inclusive backup roundtrips. Routed responses are fixture contracts, not claims of live vendor availability.
+The listening-instrument update adds real production-build tests for persistent transport continuity, mobile menu/Escape/focus, 390px layout, retained credits/consent, fyyd and HTML feed discovery, measured silence and gain playback, queue lock enforcement through existing controls, and real selected-file import/statistics reset. Test ports are isolated and strict to avoid accidentally testing another local application's server.
+
+The preceding standalone release passed 27 Chromium tests, including real local media playback/resume/bookmark seek/sleep timer, publisher transcript and chapter loading, audio-inclusive ZIP export, routed discovery/RSS subscription and refresh, OPML, persistent catalog/queue state, settings, explicit HTML inertness, 390px layout and original reader regressions. Node coverage now also includes feed/OPML/chapter parsers, subscription merge/deduplication, metadata persistence, bounded media and audio-inclusive backup roundtrips. Routed responses are fixture contracts, not claims of live vendor availability.
 
 Clock-driven browser tests verify automatic publisher downloads require both global/per-show opt-in, respect a zero limit, and do not exceed the retained-download cap across successive foreground intervals.
 
