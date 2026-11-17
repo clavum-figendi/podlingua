@@ -1,0 +1,17 @@
+{
+  "ONNX-Runtime-LICENSE.txt": "https://raw.githubusercontent.com/microsoft/onnxruntime/main/LICENSE",
+  "ONNX-Runtime-ThirdPartyNotices.txt": "https://raw.githubusercontent.com/microsoft/onnxruntime/main/ThirdPartyNotices.txt",
+  "M2M100-fairseq-LICENSE.txt": "https://raw.githubusercontent.com/facebookresearch/fairseq/main/LICENSE",
+  "Whisper-OpenAI-LICENSE.txt": "https://raw.githubusercontent.com/openai/whisper/main/LICENSE",
+  "Whisper-ONNX-model-card.md": "https://huggingface.co/Xenova/whisper-tiny/raw/5332fcc35e32a33b86612b9a57a89be7906102b1/README.md",
+  "M2M100-model-card.md": "https://huggingface.co/facebook/m2m100_418M/raw/main/README.md",
+  "M2M100-ONNX-model-card.md": "https://huggingface.co/Xenova/m2m100_418M/raw/9c374f0b7aca709787cea97b047bfbbd1559d177/README.md",
+  "OPUS-en-fr-model-card.md": "https://huggingface.co/Helsinki-NLP/opus-mt-en-fr/raw/main/README.md",
+  "OPUS-ONNX-en-fr-model-card.md": "https://huggingface.co/Xenova/opus-mt-en-fr/raw/main/README.md",
+  "OPUS-fr-en-model-card.md": "https://huggingface.co/Helsinki-NLP/opus-mt-fr-en/raw/main/README.md",
+  "OPUS-ONNX-fr-en-model-card.md": "https://huggingface.co/Xenova/opus-mt-fr-en/raw/main/README.md",
+  "OPUS-en-de-model-card.md": "https://huggingface.co/Helsinki-NLP/opus-mt-en-de/raw/main/README.md",
+  "OPUS-ONNX-en-de-model-card.md": "https://huggingface.co/Xenova/opus-mt-en-de/raw/main/README.md",
+  "OPUS-de-en-model-card.md": "https://huggingface.co/Helsinki-NLP/opus-mt-de-en/raw/main/README.md",
+  "OPUS-ONNX-de-en-model-card.md": "https://huggingface.co/Xenova/opus-mt-de-en/raw/main/README.md"
+}

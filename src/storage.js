@@ -1,0 +1,37 @@
+let database;
+async function openDatabase() {
+  if (!globalThis.indexedDB) throw new Error('IndexedDB is unavailable. Use a normal browser window with site storage enabled.');
+  if (!database) database = new Promise((resolve,reject)=>{
+    const request = indexedDB.open('podlingua-library',1);
+    request.onupgradeneeded = ()=>request.result.createObjectStore('episodes',{keyPath:'id'});
+    request.onsuccess = ()=>{
+      request.result.onversionchange = ()=>{request.result.close();database=undefined;};
+      resolve(request.result);
+    };
+    request.onerror = ()=>{database=undefined;reject(new Error('Could not open the local library. Check browser storage permissions.'));};
+    request.onblocked = ()=>{database=undefined;reject(new Error('Close other Podlingua tabs to update the library.'));};
+  });
+  return database;
+}
+async function transaction(mode, action) {
+  const db = await openDatabase();
+  return new Promise((resolve,reject)=>{
+    const tx = db.transaction('episodes',mode);
+    const request = action(tx.objectStore('episodes'));
+    tx.oncomplete = ()=>resolve(request?.result);
+    tx.onabort = ()=>reject(new Error(tx.error?.name === 'QuotaExceededError' ? 'Browser storage is full. Export and delete episodes before retrying.' : 'Local library write/read failed. Changes were not saved.'));
+    tx.onerror = ()=>{};
+  });
+}
+export async function listEpisodes() {
+  const rows = await transaction('readonly',s=>s.getAll());
+  return rows.sort((a,b)=>(b.createdAt || 0)-(a.createdAt || 0));
+}
+export async function getEpisode(id) { return transaction('readonly',s=>s.get(id)); }
+export async function saveEpisode(episode) {
+  if (!episode || typeof episode.id !== 'string' || !episode.id || episode.id.length>128) throw new Error('Invalid library episode identifier');
+  const {id,title,audio,doc,createdAt} = episode;
+  return transaction('readwrite',s=>s.put({id,title,audio,doc,createdAt}));
+}
+export async function deleteEpisode(id) { return transaction('readwrite',s=>s.delete(id)); }
+export async function clearEpisodes() { return transaction('readwrite',s=>s.clear()); }
