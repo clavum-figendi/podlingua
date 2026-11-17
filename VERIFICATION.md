@@ -2,9 +2,9 @@
 
 ## Executed locally against the production Vite build
 
-- `npm test`: 83 Node tests (document parsing/validation/export, Android JSON compatibility, overlap, Unicode tokenization, IndexedDB audio persistence and credential exclusion, provider request/response contracts, consent and URL validation, native ASR upload/poll seams, word punctuation/speaker fidelity, local-worker factory contracts).
+- `npm test`: 89 passing Node tests (document parsing/validation/export, Android JSON compatibility, overlap, Unicode tokenization, IndexedDB audio persistence and credential exclusion, provider request/response contracts, consent and URL validation, native ASR upload/poll seams, word punctuation/speaker fidelity, local-worker factory contracts).
 - `npm run build`: successful production build with GitHub Pages `/podlingua/` base and dedicated module worker.
-- `npm run test:ui`: 43 passing Chromium Playwright tests covering the expanded production interface. Exercises actual UI/import/audio playback/seek/synchronization/export/reload/library persistence, responsiveness at 390px, RTL, HTML-injection inertness, consent, nonpersistent keys, Google attribution independent of current settings, sequential queues, cancellation and stale result replacement/deletion.
+- `npm run test:ui`: 50 passing Chromium Playwright tests covering the expanded production interface. Exercises actual UI/import/audio playback/seek/synchronization/export/reload/library persistence, responsiveness at 390px, RTL, HTML-injection inertness, consent, nonpersistent keys, Google attribution independent of current settings, sequential queues, cancellation and stale result replacement/deletion.
 - `npm audit`: zero reported vulnerabilities at verification time. This is not a comprehensive security certification.
 - Credential-pattern scan over source/public/scripts/tests: no matches for GitHub/OpenAI-style live token patterns or private-key blocks. Test-only placeholder keys remain in explicitly mocked tests.
 
@@ -23,6 +23,8 @@ Offline test: enable the complete hashed shell cache online, force browser netwo
 Real predeployment network probes from the Pages origin returned readable iTunes search and BBC/Simplecast feeds; `feeds.twit.tv/sn.xml` was CORS-blocked. This is intentionally reported as a browser restriction, not silently relayed through a public proxy.
 
 ## Genuine browser inference (not a mocked provider response)
+
+`scripts/offline-inference-smoke.mjs` additionally exercised the model-library UI against the production build: downloaded Whisper Tiny and OPUS en-fr, verified both in fresh cache-only workers, installed the app shell, set the browser offline, reloaded and ran actual ASR/translation successfully with no page errors. This verifies those two models, not all seven. Offline-only worker fetch policy rejects model-host access and missing optional local-model probes; shell/runtime assets still require successful initial caching.
 
 Ran `scripts/live-browser-smoke.mjs` against `npm run preview` in headless Chromium on Linux. The browser was not cross-origin isolated (matching ordinary GitHub Pages); ONNX Runtime WASM was configured to one thread in the dedicated worker.
 

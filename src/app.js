@@ -4,6 +4,8 @@ import { asrProviders, translationProviders, transcribe, translate, lookup } fro
 import { listEpisodes, saveEpisode, getEpisode, deleteEpisode, clearEpisodes } from './storage.js';
 import {initPlayerTools} from './player-tools.js';
 import {initDesignUI} from './design-ui.js';
+import {initSettingsExperience} from './settings-experience.js';
+import {initProviderInfo} from './provider-info-ui.js';
 import {initConnectionsUI} from './connections-ui.js';
 import {initParityUI} from './parity-ui.js';
 import {matchesDownloadFilter} from './parity.js';
@@ -45,8 +47,8 @@ function guarded(fn){return (...args)=>Promise.resolve().then(()=>fn(...args)).c
 function revision(id){return revisions.get(id)||0;}
 function invalidate(id){revisions.set(id,revision(id)+1);lookupGeneration++;lookupController?.abort();}
 function time(t){return `${Math.floor((t||0)/60).toString().padStart(2,'0')}:${Math.floor((t||0)%60).toString().padStart(2,'0')}`;}
-function settings(kind){return {provider:$(`#${kind}-provider`).value,model:$(`#${kind}-model`).value.trim(),endpoint:$(`#${kind}-endpoint`).value.trim(),key:$(`#${kind}-key`).value,region:$(`#${kind}-region`).value.trim(),source:$('#source').value.trim(),target:$('#target').value.trim(),allowCloud:$('#cloud-consent').checked,allowDownload:$('#download-consent').checked,maxUploadMB:Number($('#upload-limit').value),timeoutSeconds:Number($('#timeout').value),diarization:$('#diarization').checked};}
-function consent(c){if(c.provider==='local'){if(!c.allowDownload)throw new Error('Enable local model download consent in Engine settings first.');return confirm('Run browser inference? Model files may be downloaded from Hugging Face (hundreds of MB). Processing can be slow.');}if(!c.allowCloud)throw new Error('Enable explicit cloud/transfer consent in Engine settings first.');return confirm(`Send audio/text to ${c.endpoint || c.provider}? Provider charges, retention and quotas apply. Retry may bill again.`);}
+function settings(kind){return {provider:$(`#${kind}-provider`).value,model:$(`#${kind}-model`).value.trim(),endpoint:$(`#${kind}-endpoint`).value.trim(),key:$(`#${kind}-key`).value,region:$(`#${kind}-region`).value.trim(),source:$('#source').value.trim(),target:$('#target').value.trim(),allowCloud:$('#cloud-consent').checked,allowDownload:$('#download-consent').checked,offlineOnly:document.querySelector('#offline-models-only')?.checked===true,maxUploadMB:Number($('#upload-limit').value),timeoutSeconds:Number($('#timeout').value),diarization:$('#diarization').checked};}
+function consent(c){if(c.provider==='local'){if(c.offlineOnly)return confirm('Run on-device inference using downloaded models only?');if(!c.allowDownload)throw new Error('Enable local model download consent in Engine settings first.');return confirm('Run browser inference? Model files may be downloaded from Hugging Face (hundreds of MB). Processing can be slow.');}if(!c.allowCloud)throw new Error('Enable explicit cloud/transfer consent in Engine settings first.');return confirm(`Send audio/text to ${c.endpoint || c.provider}? Provider charges, retention and quotas apply. Retry may bill again.`);}
 function attribution(provider){if(provider==='google')return `<a class="translation-attribution google-attribution" href="https://translate.google.com" target="_blank" rel="noopener"><img src="./credits/google-translate/color-regular.png" srcset="./credits/google-translate/color-regular@2x.png 2x, ./credits/google-translate/color-regular@3x.png 3x" alt="powered by Google Translate"></a>`;const name=translationProviders.find(p=>p.id===provider)?.name || provider || 'imported source';return `<span class="translation-attribution">Translated by ${esc(name)}</span>`;}
 function providerChanged(kind,providers){const p=providers.find(x=>x.id===$(`#${kind}-provider`).value);$(`#${kind}-model`).value=p.model;$(`#${kind}-endpoint`).value=p.endpoint;$(`#${kind}-key`).value='';$(`#${kind}-region`).value='';$(`#${kind}-description`).textContent=p.description;if(kind==='translation'){$('#translate').textContent=p.id==='google'?'Translate with Google':'Translate transcript ↗';$('#queue-translation').textContent=p.id==='google'?'Translate queue with Google':'Queue translations';}}
 for(const [kind,providers] of [['asr',asrProviders],['translation',translationProviders]]){providerChanged(kind,providers);$(`#${kind}-provider`).onchange=()=>providerChanged(kind,providers);}
@@ -92,6 +94,8 @@ initAudioEnhancements(bridge);
 podcastUI=initPodcastUI(bridge);
 initOfflineUI();
 initDesignUI();
+initSettingsExperience();
+initProviderInfo();
 initConnectionsUI(bridge);
 initParityUI(bridge).catch(e=>status(e.message,true));
 window.addEventListener('podlingua:library',()=>{refreshLibrary().catch(e=>status(e.message,true));});

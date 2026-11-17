@@ -41,7 +41,7 @@ function providerConfig(config, providers) {
   const p=providers.find(p=>p.id===config.provider);
   if (!p) throw new Error('Unknown provider');
   if(p.id!=='local' && config.allowCloud!==true) throw new Error('Explicit cloud/transfer consent is required.');
-  if(p.id==='local' && config.allowDownload!==true) throw new Error('Explicit local model download consent is required.');
+  if(p.id==='local' && config.allowDownload!==true && config.offlineOnly!==true) throw new Error('Explicit local model download consent is required.');
   return {...p,...config, model:config.model || p.model,endpoint:config.endpoint || p.endpoint};
 }
 function timed(start,end,text,offset=0) {
@@ -113,7 +113,7 @@ export async function transcribe(file,config,opts={}) {
       operation.signal.throwIfAborted();
       onProgress({status:'transcribing',progress:Math.round(index/chunks.length*100)});
       const data=c.provider==='local'
-        ? await local.run({task:'asr',model:c.model,pcm:chunk.pcm,source:language})
+        ? await local.run({task:'asr',model:c.model,pcm:chunk.pcm,source:language,offlineOnly:c.offlineOnly===true})
         : await requestASR(c,chunk.pcm,language,operation.signal);
       const parsed=c.provider==='local'?parseLocalChunks(data,chunk.offset):parseASR(c.provider,data,chunk.offset);
       if(!language && data.language)language=normalizeLanguage(data.language);
@@ -142,7 +142,7 @@ export async function translate(doc,config,opts={}) {
       operation.signal.throwIfAborted();
       const batch=doc.segments.slice(i,i+(c.provider==='mymemory'?1:8)).map(s=>s.text);
       if(batch.some(t=>typeof t!=='string'||t.length>4000)) throw new Error('Translation segment exceeds 4000 characters. Split it first.');
-      const out=c.provider==='local' ? await local.run({task:'translate',texts:batch,source,target:c.target,model:c.model}) : parseTranslation(c.provider,await requestJSON(buildTranslationRequest({...c,source},batch),operation.signal),batch.length);
+      const out=c.provider==='local' ? await local.run({task:'translate',texts:batch,source,target:c.target,model:c.model,offlineOnly:c.offlineOnly===true}) : parseTranslation(c.provider,await requestJSON(buildTranslationRequest({...c,source},batch),operation.signal),batch.length);
       translations.push(...out);
       opts.onProgress?.({status:'translating',progress:Math.round(translations.length/doc.segments.length*100)});
     }
@@ -310,6 +310,7 @@ export function workerPayload(job){
   const pcm=job.pcm.slice();
   return {job:{...job,pcm},transfer:[pcm.buffer]};
 }
+export async function prepareLocalModel(kind,model,{signal=new AbortController().signal,onProgress=()=>{},offlineOnly=false}={}){const runner=localRunner(signal,onProgress);try{return await runner.run({task:'prepare',kind,model,offlineOnly});}finally{runner.close();}}
 function localRunner(signal,onProgress=()=>{}) {
   signal.throwIfAborted();
   if(typeof Worker==='undefined')throw new Error('Web Workers are required for browser inference.');

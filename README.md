@@ -10,6 +10,14 @@ An **unofficial, independent browser podcast manager** with the transcription/tr
 
 ## What it does
 
+### Discovery, onboarding and processing settings
+
+Discover now offers explicit topic suggestions, Apple/fyyd/Podcast Index selection, clear loading/empty/error states, retry/cancel and stale-result protection. Suggestions fill the search box; they do not silently send a query. Podcast Index uses your own session-only API credentials and documented request signing, with no shared key or proxy forwarding.
+
+A first-run setup guide can be skipped, replayed or disabled in Engine settings. Presentation uses system sans-serif fonts and a restrained layout. Transcription and translation have independent on-device/online selectors. The provider comparison distinguishes keyless access, free tiers, one-time credits and paid/account-dependent offers, plus actual adapter speaker-diarization support. See [the dated provider guide and official sources](public/PROVIDERS.md).
+
+The on-device library offers explicit download, cache-only verification, selection and removal for seven supported Whisper/OPUS/M2M100 models. Download consent is separate from online-transfer consent. “Use downloaded models only” disables model-host access; missing model files fail rather than downloading. A real test downloaded Whisper Tiny and OPUS English→French, enabled the app shell, disconnected the browser, reloaded, and successfully transcribed and translated speech. Larger models remain device-dependent. Models now use the app-specific `podlingua-models-v1` cache; older shared Transformers caches are not silently deleted or treated as verified downloads.
+
 ### Listening instrument edition
 
 The visual update adds original inline SVG icons, named collapsible tool groups, persistent skip controls, mobile 44px touch targets and larger mobile form text. Secondary tools no longer crowd the transcript.
