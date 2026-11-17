@@ -4,6 +4,7 @@ import { asrProviders, translationProviders, transcribe, translate, lookup } fro
 import { listEpisodes, saveEpisode, getEpisode, deleteEpisode, clearEpisodes } from './storage.js';
 import {initPlayerTools} from './player-tools.js';
 import {initDesignUI} from './design-ui.js';
+import {initConnectionsUI} from './connections-ui.js';
 import {initParityUI} from './parity-ui.js';
 import {matchesDownloadFilter} from './parity.js';
 import {initAudioEnhancements} from './audio-enhancements-ui.js';
@@ -91,6 +92,7 @@ initAudioEnhancements(bridge);
 podcastUI=initPodcastUI(bridge);
 initOfflineUI();
 initDesignUI();
+initConnectionsUI(bridge);
 initParityUI(bridge).catch(e=>status(e.message,true));
 window.addEventListener('podlingua:library',()=>{refreshLibrary().catch(e=>status(e.message,true));});
 refreshLibrary().catch(e=>status(e.message,true));

@@ -6,7 +6,7 @@ import {readFile} from 'node:fs/promises';
 test.beforeEach(async({page})=>{
  await page.route('**/parity-source/*.js',async route=>{
   const name=new URL(route.request().url()).pathname.split('/').pop();
-  if(!['parity-ui.js','parity.js','catalog.js','storage.js','podcasts.js'].includes(name))return route.abort();
+  if(!['parity-ui.js','parity.js','catalog.js','storage.js','podcasts.js','connections.js'].includes(name))return route.abort();
   try{await route.fulfill({contentType:'text/javascript',body:await readFile(new URL('../src/'+name,import.meta.url),'utf8')});}catch{await route.fulfill({status:404,body:'Module not implemented'});}
  });
  await page.goto('/podlingua/');

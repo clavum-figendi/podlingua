@@ -164,4 +164,73 @@ body.design-ready{background:var(--paper);color:var(--ink);font-family:'Avenir N
  .design-ready .reader-footer button{font-size:9px;padding:5px}
  .design-ready .reader-footer select{font-size:9px;padding:4px}
 }
+/* Local line icons and progressively disclosed study utilities. */
+.design-icon{width:19px;height:19px;flex:none;vertical-align:middle;pointer-events:none}
+.design-ready .icon-control{display:inline-flex;align-items:center;gap:8px}
+.design-ready #podcast-nav button.icon-control{display:flex;align-items:center;gap:11px}
+.design-ready #podcast-nav button::before{display:none}
+.design-ready #podcast-nav .design-icon{color:var(--signal);width:18px;height:18px}
+.design-ready #design-menu>span{display:none}
+.design-ready .player-tools{display:grid;grid-template-columns:1fr 1fr;gap:0 18px;padding:10px 20px;background:var(--surface);border:0;border-bottom:1px solid var(--rule)}
+.design-ready .design-disclosure,.design-ready .audio-enhancements{min-width:0;margin:0;padding:0;border:0;background:transparent}
+.design-ready :is(.design-disclosure,.audio-enhancements)>summary{display:flex;align-items:center;gap:8px;min-height:42px;font-size:11px;font-weight:500;cursor:pointer;color:var(--quiet);list-style:none}
+.design-ready :is(.design-disclosure,.audio-enhancements)>summary::-webkit-details-marker{display:none}
+.design-ready :is(.design-disclosure,.audio-enhancements)>summary::after{content:'+';margin-left:auto;font:17px 'Courier New',monospace;color:var(--signal)}
+.design-ready :is(.design-disclosure,.audio-enhancements)[open]>summary::after{content:'−'}
+.design-ready .design-disclosure-content{display:flex;gap:7px;flex-wrap:wrap;align-items:center;padding:5px 0 15px}
+.design-ready .design-disclosure-content label{display:flex;align-items:center;gap:6px}
+.design-ready .design-disclosure-content button{font-size:11px}
+.design-ready .design-disclosure-content input[type=number]{width:65px}
+.design-ready .audio-enhancements[open]{display:flex;flex-wrap:wrap;gap:8px;padding-bottom:15px}
+.design-ready .audio-enhancements>summary{width:100%}
+.design-ready .audio-enhancements label{display:flex;align-items:center;gap:6px;font-size:11px}
+.design-ready #enhancement-status{font-size:11px;color:var(--quiet)}
+.design-ready .reader-actions{align-items:center;gap:10px}
+.design-ready .reader-actions>.design-disclosure{flex-basis:100%;border-top:1px solid var(--rule)}
+.design-ready .reader-actions>.design-disclosure>summary{min-height:38px}
+.design-ready #display-options{flex-basis:100%;padding:8px 0;background:transparent;border:0}
+.design-ready #display-options:not([hidden]){display:flex;gap:12px;flex-wrap:wrap}
+.design-ready #display-open{font-size:0}
+.design-ready #display-open .design-icon{width:18px}
+.design-ready .audio-area{min-width:0;position:relative}
+.design-ready .player-label strong{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+.design-ready .design-quick-transport{display:inline-flex;gap:6px;margin-top:4px}
+.design-ready .design-quick-transport button{font-size:10px;min-height:30px;padding:3px 10px}
+.design-ready .player-options{position:absolute;bottom:0;right:0;min-height:30px;display:flex;align-items:center}
+.design-ready .workflow-step p{margin:5px 0}
+@media(max-width:700px){
+ .design-ready main{padding-bottom:190px}
+ .design-ready .player-tools{grid-template-columns:1fr;padding:5px 14px}
+ .design-ready .player-tools>details+details{border-top:1px solid var(--rule)}
+ .design-ready .reader-actions{justify-content:flex-start;gap:6px 12px}
+ .design-ready .reader-actions>.design-disclosure{flex-basis:100%}
+ .design-ready :is(button,select,input:not([type=checkbox]):not([type=file]),summary,.import-label,.check,label:has(>input[type=checkbox])){min-height:44px;min-width:44px}
+ .design-ready input[type=checkbox]{width:20px;height:20px;flex:none}
+ .design-ready :is(input,select){font-size:16px}
+ body.design-ready #podcast-nav button.icon-control{min-height:44px}
+ .design-ready #design-menu{min-height:44px}
+ .design-ready #design-play{width:48px;height:48px;min-height:48px}
+ .design-ready #design-seek{min-height:44px;height:44px}
+ .design-ready .design-transport{height:44px;gap:6px}
+ .design-ready #speed{min-height:44px;min-width:64px;font-size:16px}
+ .design-ready .intro .import-label{font-size:12px;padding:10px 12px;justify-content:center;flex:1}
+ .design-ready .intro .design-icon{width:17px;height:17px}
+ .design-ready .design-quick-transport button{min-height:44px;min-width:64px;font-size:11px}
+ .design-ready .player-options{min-height:44px}
+ .design-ready .player-options label{font-size:0}
+ .design-ready .workflow-step{margin-bottom:0}
+ .design-ready .workflow-step p{display:none}
+ .design-ready .workflow-step button{font-size:11px;padding:8px 0;text-align:left;line-height:1.4}
+ .design-ready .queue-box{grid-column:1/-1}
+ .design-ready .queue-box p{margin:7px 0}
+ .design-ready .queue-box button{font-size:11px}
+ .design-ready .study-panel{grid-template-columns:1fr;gap:16px}
+ .design-ready .study-panel>.workflow-step:nth-of-type(3){display:none}
+ .design-ready #listening-dock{padding:8px 14px max(8px,env(safe-area-inset-bottom))}
+ .design-ready .reader-footer{flex-wrap:wrap;gap:8px}
+ .design-ready .reader-footer>div{display:flex;flex-wrap:wrap;gap:6px}
+ .design-ready dialog{max-width:calc(100vw - 20px);padding:18px}
+ .design-ready .pc-tools :is(input,select){font-size:16px}
+ .design-ready .sidebar{padding-bottom:190px}
+}
 @media(prefers-reduced-motion:reduce){.design-ready *{animation:none!important;transition:none!important;scroll-behavior:auto!important}}

@@ -1,6 +1,7 @@
 // Browser-only podcast transport and parsers. No remote scripts or shared proxy.
+import {authenticatedFetch} from './connections.js';
 const MAX_XML=32*1024*1024, MAX_ENTRIES=20000;
-export async function fetchResource(url,{signal,proxy='',allowProxy=false,timeoutSeconds=30,fetchFn=globalThis.fetch,maxBytes=MAX_XML}={}) {
+export async function fetchResource(url,{signal,proxy='',allowProxy=false,timeoutSeconds=30,fetchFn=authenticatedFetch,maxBytes=MAX_XML}={}) {
  url=requiredUrl(url);let target=url;
  if(proxy){if(!allowProxy)throw new Error('Custom proxy requires explicit permission: it can read your feed URL.');if(!proxy.includes('{url}'))throw new Error('Proxy template must contain {url}.');target=requiredUrl(proxy.replaceAll('{url}',encodeURIComponent(url)));}
  if(!Number.isFinite(maxBytes)||maxBytes<1||maxBytes>512*1024*1024)throw new Error('Invalid response size limit.');
@@ -39,13 +40,19 @@ export async function discoverPodcasts(country='US',options={}) {
 }
 const ITUNES='http://www.itunes.com/dtds/podcast-1.0.dtd';
 const PODCAST='https://podcastindex.org/namespace/1.0';
+const MEDIA='http://search.yahoo.com/mrss/', DC='http://purl.org/dc/elements/1.1/';
+// Only inspect MediaRSS's defined grouping levels, never arbitrary descendants/items.
+const mediaNodes=(n,name)=>[...named(n,name,MEDIA),...named(n,'group',MEDIA).flatMap(g=>named(g,name,MEDIA))];
+const mediaValue=(n,name)=>plain(text(mediaNodes(n,name)[0]));
+const mediaScore=n=>/^audio\//i.test(n.getAttribute('type')||'')||n.getAttribute('medium')==='audio'?3:/^video\//i.test(n.getAttribute('type')||'')||n.getAttribute('medium')==='video'?2:0;
+function mediaImage(n,base){for(const t of [...mediaNodes(n,'thumbnail'),...mediaNodes(n,'content').filter(c=>/^image\//i.test(c.getAttribute('type')||'')||c.getAttribute('medium')==='image')]){const u=attrUrl(t,'url',base);if(u)return u;}return '';}
 export function safeUrl(value,base) {
  try { const u=new URL(value,base); if(!value || u.username || u.password || !(u.protocol==='https:' || (u.protocol==='http:' && ['localhost','127.0.0.1','[::1]'].includes(u.hostname)))) return ''; u.hash=''; return u.href; } catch { return ''; }
 }
 function requiredUrl(value) { const url=safeUrl(value); if(!url) throw new Error('Use a valid HTTPS URL without embedded credentials.'); return url; }
 const children=n=>Array.from(n?.childNodes||[]).filter(x=>x.nodeType===1);
 const namespace=n=>n==='http://www.itunes.com/DTDs/Podcast-1.0.dtd'?ITUNES:n==='https://github.com/Podcastindex-org/podcast-namespace/blob/main/docs/1.0.md'?PODCAST:n;
-const named=(n,name,ns)=>children(n).filter(x=>(x.localName||x.nodeName.split(':').pop())===name && (ns===undefined || namespace(x.namespaceURI)===ns));
+const named=(n,name,ns)=>children(n).filter(x=>(x.localName||x.nodeName.split(':').pop())===name && (ns===undefined ? ['', 'http://www.w3.org/2005/Atom', 'http://purl.org/rss/1.0/'].includes(x.namespaceURI||'') : namespace(x.namespaceURI)===ns));
 const first=(n,name,ns)=>named(n,name,ns)[0];
 const text=n=>n?.textContent?.trim()||'';
 function plain(value) { return String(value||'').replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1\s*>/gi,'').replace(/<[^>]*>/g,' ').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#39;|&apos;/g,"'").replace(/&amp;/g,'&').replace(/<[^>]*>/g,' ').replace(/[<>]/g,'').replace(/\s+/g,' ').trim().slice(0,100000); }
@@ -60,7 +67,7 @@ function xmlDocument(xml) {
 }
 function baseOf(n,fallback) { const lineage=[];for(let p=n;p?.nodeType===1;p=p.parentNode) lineage.unshift(p);let base=fallback;for(const p of lineage) {const b=p.getAttribute('xml:base');if(b) base=safeUrl(b,base)||base;}return base; }
 const attrUrl=(n,key,base)=>safeUrl(n?.getAttribute(key),baseOf(n,base));
-function image(n,base) { const i=first(n,'image',ITUNES); if(i) return attrUrl(i,'href',base);return safeUrl(text(first(first(n,'image'),'url'))||value(n,'logo')||value(n,'icon'),base); }
+function image(n,base) { const i=first(n,'image',ITUNES); if(i) return attrUrl(i,'href',base);return safeUrl(text(first(first(n,'image'),'url'))||value(n,'logo')||value(n,'icon'),baseOf(n,base))||mediaImage(n,base); }
 function duration(s) {if(!s)return 0;const parts=s.split(':').map(Number);if(parts.length>3||parts.some(x=>!Number.isFinite(x)||x<0))return 0;return parts.reduce((a,x)=>a*60+x,0);}
 const explicit=s=>/^(yes|true|explicit|1)$/i.test(s);
 function stableId(input) { // Two independent 64-bit FNV hashes; no private feed URL in episode IDs.
@@ -70,16 +77,16 @@ export function parseFeed(xml,url) {
  url=requiredUrl(url);const root=xmlDocument(xml).documentElement,atom=root.localName==='feed';const channel=atom?root:first(root,'channel');
  if(!channel)throw new Error('Expected an RSS or Atom podcast feed.');
  const linkOf=n=>atom?attrUrl(named(n,'link').find(x=>!x.getAttribute('rel')||x.getAttribute('rel')==='alternate'),'href',url):safeUrl(value(n,'link'),baseOf(n,url));
- const feed={id:url,url,title:value(channel,'title'),description:value(channel,atom?'subtitle':'description'),author:value(channel,'author',ITUNES)||value(first(channel,'author'),'name')||value(channel,'managingEditor'),image:image(channel,url),link:linkOf(channel),language:value(channel,'language')||channel.getAttribute('xml:lang')||'',explicit:explicit(value(channel,'explicit',ITUNES)),episodes:[]};
+ const feed={id:url,url,title:value(channel,'title'),description:value(channel,atom?'subtitle':'description')||mediaValue(channel,'description')||value(channel,'description',DC),author:value(channel,'author',ITUNES)||value(first(channel,'author'),'name')||value(channel,'managingEditor')||value(channel,'creator',DC),image:image(channel,url),link:linkOf(channel),language:value(channel,'language')||channel.getAttribute('xml:lang')||'',explicit:explicit(value(channel,'explicit',ITUNES)),funding:named(channel,'funding',PODCAST).slice(0,100).map(n=>({url:attrUrl(n,'url',url),title:plain(text(n))})).filter(n=>n.url),newFeedUrl:safeUrl(text(first(channel,'new-feed-url',ITUNES)),baseOf(first(channel,'new-feed-url',ITUNES),url)),nextPageUrl:attrUrl(named(channel,'link','http://www.w3.org/2005/Atom').find(n=>n.getAttribute('rel')==='next'),'href',url),episodes:[]};
  const entries=named(channel,atom?'entry':'item');if(entries.length>MAX_ENTRIES)throw new Error('Feed has too many episodes.');
  const seen=new Set();for(const n of entries) {
- const base=baseOf(n,url);const enc=atom?named(n,'link').filter(x=>x.getAttribute('rel')==='enclosure'):named(n,'enclosure');
- const playable=enc.filter(x=>attrUrl(x,atom?'href':'url',base)).sort((a,b)=>score(b)-score(a));const enclosure=playable.find(x=>score(x)>=1);const audioUrl=enclosure?attrUrl(enclosure,atom?'href':'url',base):'';
- const guid=value(n,atom?'id':'guid'),title=value(n,'title'); const key=guid||audioUrl||`${title}|${value(n,'pubDate')||value(n,'published')}`;const id=stableId(url+'\n'+key);if(seen.has(id))continue;seen.add(id);
- const date=Date.parse(value(n,atom?'published':'pubDate')||value(n,'updated'));
+ const base=url;const enc=atom?named(n,'link').filter(x=>x.getAttribute('rel')==='enclosure'):named(n,'enclosure');
+ const playable=enc.filter(x=>attrUrl(x,atom?'href':'url',base)).sort((a,b)=>score(b)-score(a));const enclosure=playable.find(x=>score(x)>=1);const media=mediaNodes(n,'content').filter(x=>mediaScore(x)&&attrUrl(x,'url',base)).sort((a,b)=>Number(b.getAttribute('isDefault')==='true')-Number(a.getAttribute('isDefault')==='true')||mediaScore(b)-mediaScore(a))[0];const audioUrl=enclosure?attrUrl(enclosure,atom?'href':'url',base):attrUrl(media,'url',base);
+ const guid=value(n,atom?'id':'guid'),title=value(n,'title')||mediaValue(n,'title')||value(n,'title',DC); const key=guid||audioUrl||`${title}|${value(n,'pubDate')||value(n,'published')}`;const id=stableId(url+'\n'+key);if(seen.has(id))continue;seen.add(id);
+ const date=[value(n,atom?'published':'pubDate'),value(n,'updated'),value(n,'date',DC)].map(s=>Date.parse(s)).find(Number.isFinite);
  const chapterNode=first(n,'chapters',PODCAST);
  const inline=children(first(n,'chapters','http://podlove.org/simple-chapters')).map(c=>({start:duration(c.getAttribute('start')),title:plain(c.getAttribute('title')),url:attrUrl(c,'href',base),image:attrUrl(c,'image',base)}));
- feed.episodes.push({id,feedId:url,guid,title,description:value(n,'encoded','http://purl.org/rss/1.0/modules/content/')||value(n,atom?'content':'description')||value(n,'summary'),audioUrl,image:image(n,url)||feed.image,published:Number.isFinite(date)?date:0,duration:duration(value(n,'duration',ITUNES)),website:linkOf(n),transcripts:named(n,'transcript',PODCAST).slice(0,100).map(t=>({url:attrUrl(t,'url',base),type:t.getAttribute('type')||'',language:t.getAttribute('language')||''})).filter(t=>t.url),chaptersUrl:attrUrl(chapterNode,'url',base),chapters:inline,season:Number(value(n,'season',ITUNES))||0,episodeNumber:Number(value(n,'episode',ITUNES))||0,explicit:first(n,'explicit',ITUNES)?explicit(value(n,'explicit',ITUNES)):feed.explicit});
+ feed.episodes.push({id,feedId:url,guid,title,description:value(n,'encoded','http://purl.org/rss/1.0/modules/content/')||value(n,atom?'content':'description')||value(n,'summary')||mediaValue(n,'description')||value(n,'description',DC),author:value(n,'author',ITUNES)||value(first(n,'author'),'name')||value(n,'creator',DC)||feed.author,audioUrl,image:image(n,url)||feed.image,published:Number.isFinite(date)?date:0,duration:duration(value(n,'duration',ITUNES))||duration(media?.getAttribute('duration')),website:linkOf(n),socialLinks:named(n,'socialInteract',PODCAST).slice(0,100).map(t=>({url:attrUrl(t,'uri',url),protocol:plain(t.getAttribute('protocol')),accountId:plain(t.getAttribute('accountId')),priority:/^\d+$/.test(t.getAttribute('priority')||'')?Math.min(1000000,Number(t.getAttribute('priority'))):0})).filter(t=>t.url),transcripts:named(n,'transcript',PODCAST).slice(0,100).map(t=>({url:attrUrl(t,'url',base),type:t.getAttribute('type')||'',language:t.getAttribute('language')||''})).filter(t=>t.url),chaptersUrl:attrUrl(chapterNode,'url',base),chapters:inline,season:Number(value(n,'season',ITUNES))||0,episodeNumber:Number(value(n,'episode',ITUNES))||0,explicit:first(n,'explicit',ITUNES)?explicit(value(n,'explicit',ITUNES)):feed.explicit});
  }return feed;
 }
 function score(n) {const t=n.getAttribute('type')||'';return /^audio\//i.test(t)?3:/^video\//i.test(t)?2:!t||/octet-stream/i.test(t)?1:0;}
@@ -96,5 +103,5 @@ export function exportOPML(subscriptions) {
 export function parseChapters(json) {
  if(typeof json==='string'){if(json.length>MAX_XML)throw new Error('Chapter file is too large.');try{json=JSON.parse(json);}catch{throw new Error('Invalid chapter JSON.');}}
  if(!Array.isArray(json?.chapters)||json.chapters.length>10000)throw new Error('Invalid chapter list.');let previous=-1;
- return json.chapters.map(c=>{const start=c.startTime??c.start;if(typeof start!=='number'||!Number.isFinite(start)||start<0||start<previous||start>31536000)throw new Error('Chapter times must be chronological, finite seconds.');previous=start;const out={start,title:plain(c.title)};for(const key of ['url','image']){const u=safeUrl(c[key]||c[key==='image'?'img':'url']);if(u)out[key]=u;}return out;});
+ return json.chapters.map(c=>{const start=c.startTime??c.start;if(typeof start!=='number'||!Number.isFinite(start)||start<0||start<previous||start>31536000)throw new Error('Chapter times must be chronological, finite seconds.');previous=start;const out={start,title:plain(c.title)};const end=c.endTime??c.end;if(end!==undefined){if(typeof end!=='number'||!Number.isFinite(end)||end<start||end>31536000)throw new Error('Chapter end times must be finite seconds after their start.');out.end=end;}for(const key of ['url','image']){const u=safeUrl(c[key]||c[key==='image'?'img':'url']);if(u)out[key]=u;}return out;});
 }

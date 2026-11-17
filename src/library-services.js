@@ -1,4 +1,5 @@
 import {zipSync,unzipSync,strToU8,strFromU8} from 'fflate';
+import {authenticatedFetch} from './connections.js';
 import {getEpisode,saveEpisode,episodeMetadataFields} from './storage.js';
 import {normalizeDocument,parseTranscript} from './core.js';
 export function safePodcastURL(value){
@@ -6,7 +7,7 @@ export function safePodcastURL(value){
   if(u.username||u.password||u.hash || (u.protocol!=='https:' && !(u.protocol==='http:'&&['localhost','127.0.0.1','[::1]'].includes(u.hostname))))throw new Error('Use a secure HTTPS podcast URL without embedded credentials or a fragment.');
   return u.href;
 }
-export async function fetchMedia(url,{signal,maxMB=200,onProgress=()=>{},fetchFn=fetch,proxy='',allowProxy=false}={}){
+export async function fetchMedia(url,{signal,maxMB=200,onProgress=()=>{},fetchFn=authenticatedFetch,proxy='',allowProxy=false}={}){
   const original=safePodcastURL(url);let target=original;
   if(proxy){if(!allowProxy||!proxy.includes('{url}'))throw new Error('A proxy requires explicit consent and a {url} placeholder.');target=safePodcastURL(proxy.replace('{url}',encodeURIComponent(original)));}
   if(!Number.isFinite(maxMB)||maxMB<1||maxMB>1000)throw new Error('Download budget must be 1–1000 MB.');
@@ -26,7 +27,7 @@ export async function fetchMedia(url,{signal,maxMB=200,onProgress=()=>{},fetchFn
   }finally{clearTimeout(timer);signal?.removeEventListener('abort',abort);}
 }
 const allowedSettings=['skipBack','skipForward','defaultSpeed','followQueue','skipCompleted','autoDeletePlayed','enqueueDownloaded','autoDownload','autoDownloadLimit','refreshMinutes','maxDownloadMB','proxy','allowProxy','theme','includeExplicit','rememberPosition','country','queueLocked','queueKeepSorted','queueSort','enqueuePosition'];
-const subscriptionFields=['id','url','title','description','author','image','link','language','explicit','tags','speed','skipIntro','skipOutro','autoDownload','createdAt','updatedAt','lastRefresh','lastError','titleOverride','keepUpdated','downloadInclude','downloadExclude','newEpisodeAction'];
+const subscriptionFields=['id','url','title','description','author','image','link','language','explicit','tags','speed','skipIntro','skipOutro','autoDownload','createdAt','updatedAt','lastRefresh','lastError','titleOverride','keepUpdated','downloadInclude','downloadExclude','newEpisodeAction','newFeedUrl','nextPageUrl','funding'];
 const pick=(obj,fields)=>Object.fromEntries(fields.filter(k=>Object.hasOwn(obj,k)).map(k=>[k,obj[k]]));
 export const MAX_BACKUP_AUDIO_BYTES=512*1024*1024;
 export const backupEntryByteLimit=name=>name==='library.json'?50*1024*1024:/^audio\/\d+\.bin$/.test(name)?MAX_BACKUP_AUDIO_BYTES:0;
@@ -72,7 +73,7 @@ export async function parseBackup(file){
 export async function patchEpisode(id,patch){
   for(let attempt=0;attempt<3;attempt++){
     const current=await getEpisode(id);if(!current)throw new Error('Episode was deleted.');
-    try{return await saveEpisode({...current,...patch,id:current.id,revision:current.revision});}catch(error){if(!error.message.includes('changed or was deleted')||attempt===2)throw error;}
+    try{const values=typeof patch==='function'?patch(current):patch;if(values===null)return current;return await saveEpisode({...current,...values,id:current.id,revision:current.revision});}catch(error){if(!error.message.includes('changed or was deleted')||attempt===2)throw error;}
   }
 }
 export async function downloadEpisode(id,{signal,onProgress}={}){

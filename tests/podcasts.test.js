@@ -45,6 +45,27 @@ test('iTunes search safely resolves missing feed URLs through lookup',async()=>{
 test('top list resolves Apple identifiers instead of inventing feed URLs',async()=>{
  const rows=await api.discoverPodcasts('gb',{fetchFn:async u=>u.includes('/lookup?')?Response.json({results:[{feedUrl:'https://example.org/top',collectionName:'Top'}]}):Response.json({feed:{entry:[{id:{attributes:{'im:id':'123'}},'im:name':{label:'Top'}}]}})});assert.equal(rows[0].url,'https://example.org/top');
 });
+test('MediaRSS and Dublin Core supply safe fallback metadata without overriding canonical fields',()=>{
+ const xml=`<rss xmlns:media="http://search.yahoo.com/mrss/" xmlns:dc="http://purl.org/dc/elements/1.1/"><channel xml:base="https://example.org/p/"><title>Show</title><dc:creator>Ada</dc:creator><dc:description>About</dc:description><media:thumbnail url="cover.jpg"/><item><guid>fallback</guid><media:group><media:title>Media title</media:title><media:description>&lt;b&gt;Summary&lt;/b&gt;</media:description><media:content url="image.jpg" type="image/jpeg"/><media:content url="audio.mp3" medium="audio" duration="12.5"/></media:group><dc:date>2020-01-02T00:00:00Z</dc:date><dc:creator>Guest</dc:creator></item><item><guid>canonical</guid><title>Canonical</title><description>Original</description><enclosure url="original.mp3" type="audio/mpeg"/><media:content url="other.mp3" type="audio/mpeg"/><media:description>Fallback</media:description><media:thumbnail url="javascript:bad"/></item></channel></rss>`;
+ const f=api.parseFeed(xml,'https://example.org/f');assert.equal(f.author,'Ada');assert.equal(f.description,'About');assert.equal(f.image,'https://example.org/p/cover.jpg');
+ const e=f.episodes[0];assert.equal(e.title,'Media title');assert.equal(e.description,'Summary');assert.equal(e.audioUrl,'https://example.org/p/audio.mp3');assert.equal(e.image,'https://example.org/p/image.jpg');assert.equal(e.duration,12.5);assert.equal(e.published,Date.parse('2020-01-02'));assert.equal(e.author,'Guest');
+ assert.equal(f.episodes[1].title,'Canonical');assert.equal(f.episodes[1].description,'Original');assert.equal(f.episodes[1].audioUrl,'https://example.org/p/original.mp3');
+});
+test('Podcasting2 links and relocation/pagination are safe metadata only and preserve IDs',()=>{
+ const extra=`<podcast:funding url="/support">&lt;b&gt;Donate&lt;/b&gt;</podcast:funding><podcast:funding url="http://unsafe.example/x">Bad</podcast:funding><itunes:new-feed-url>/new-feed</itunes:new-feed-url><atom:link xmlns:atom="http://www.w3.org/2005/Atom" rel="next" href="/page2"/>`;
+ const xml=rss.replace('<title>Example</title>','<title>Example</title>'+extra).replace('<guid>one</guid>','<guid>one</guid><podcast:socialInteract uri="https://social.example/post#thread" protocol="activitypub" accountId="@ada" priority="2"/><podcast:socialInteract uri="javascript:bad"/>');
+ const f=api.parseFeed(xml,'https://example.org/feed/rss');assert.deepEqual(f.funding,[{url:'https://example.org/support',title:'Donate'}]);assert.equal(f.newFeedUrl,'https://example.org/new-feed');assert.equal(f.nextPageUrl,'https://example.org/page2');assert.equal(f.url,'https://example.org/feed/rss');assert.equal(f.episodes[0].id,api.parseFeed(rss,f.url).episodes[0].id);assert.deepEqual(f.episodes[0].socialLinks,[{url:'https://social.example/post',protocol:'activitypub',accountId:'@ada',priority:2}]);
+ const atom=api.parseFeed('<feed xmlns="http://www.w3.org/2005/Atom" xml:base="https://example.org/p/"><link rel="next" href="next"/></feed>',f.url);assert.equal(atom.nextPageUrl,'https://example.org/p/next');
+ const bad=api.parseFeed(xml.replace('/new-feed','https://u:p@bad.example/f').replace('/page2','http://unsafe.example/p'),'https://example.org/f');assert.equal(bad.newFeedUrl,'');assert.equal(bad.nextPageUrl,'');
+});
+test('namespace fallback cannot override canonical metadata or double-resolve relative xml:base',()=>{
+ const f=api.parseFeed('<rss xmlns:m="http://search.yahoo.com/mrss/" xmlns:dc="http://purl.org/dc/elements/1.1/"><channel xml:base="sub/"><m:title>Fallback</m:title><title>Canonical</title><item><guid>one</guid><m:title>Fallback</m:title><title>Canonical</title><m:description>Fallback</m:description><description>Canonical</description><enclosure url="audio.mp3" type="audio/mpeg"/></item></channel></rss>','https://example.org/feed');
+ assert.equal(f.title,'Canonical');assert.equal(f.episodes[0].title,'Canonical');assert.equal(f.episodes[0].description,'Canonical');assert.equal(f.episodes[0].audioUrl,'https://example.org/sub/audio.mp3');
+});
+test('JSON chapters preserve explicit fractional end times without inferring replacements',()=>{
+ assert.deepEqual(api.parseChapters({chapters:[{startTime:1.25,endTime:2.75,title:'One'},{start:8,end:9.5,title:'Two'}]}),[{start:1.25,end:2.75,title:'One'},{start:8,end:9.5,title:'Two'}]);
+ for(const end of [NaN,Infinity,-1,0,'3'])assert.throws(()=>api.parseChapters({chapters:[{start:1,end}]}));
+});
 test('legacy namespace aliases and double encoded descriptions remain plain text',()=>{
  const xml=rss.replaceAll('http://www.itunes.com/dtds/podcast-1.0.dtd','http://www.itunes.com/DTDs/Podcast-1.0.dtd').replaceAll('https://podcastindex.org/namespace/1.0','https://github.com/Podcastindex-org/podcast-namespace/blob/main/docs/1.0.md').replace('Hello','&lt;img src=x onerror=alert(1)&gt;');const f=api.parseFeed(xml,'https://example.org/f');assert.equal(f.author,'Ada');assert.equal(f.episodes[0].transcripts.length,1);assert.ok(!f.episodes[0].description.includes('<'));
 });

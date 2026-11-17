@@ -1,5 +1,5 @@
 let database;
-export const episodeMetadataFields=['feedId','guid','audioUrl','image','description','published','duration','website','transcripts','chaptersUrl','chapters','season','episodeNumber','explicit','favorite','played','archived','position','playedAt','bookmarks','downloadedAt','mediaType','listenedSeconds'];
+export const episodeMetadataFields=['author','socialLinks','feedId','guid','audioUrl','image','description','published','duration','website','transcripts','chaptersUrl','chapters','season','episodeNumber','explicit','favorite','played','archived','position','playedAt','bookmarks','downloadedAt','mediaType','listenedSeconds'];
 async function openDatabase() {
   if (!globalThis.indexedDB) throw new Error('IndexedDB is unavailable. Use a normal browser window with site storage enabled.');
   if (!database) database = new Promise((resolve,reject)=>{

@@ -12,6 +12,12 @@ An **unofficial, independent browser podcast manager** with the transcription/tr
 
 ### Listening instrument edition
 
+The visual update adds original inline SVG icons, named collapsible tool groups, persistent skip controls, mobile 44px touch targets and larger mobile form text. Secondary tools no longer crowd the transcript.
+
+Connections now offers manual Nextcloud gpoddersync / gpodder API-v2 subscription and listening-action exchange with preview/apply and explicit uploads. Use a CORS-enabled server; no account is supplied and real account interoperability has not been live-verified. Private feed Basic authentication is tab-session-only and scoped to an exact HTTPS path or explicit directory. Credentialed redirects are rejected; authenticated audio must be downloaded before playback. No passwords are stored in settings or backups.
+
+Publisher workflows include explicit feed-address migration retaining local identities, one-page-at-a-time archive loading, funding/social links, MediaRSS/Dublin Core fallback metadata, and ID3v2.3/v2.4 CHAP extraction from downloaded audio. Unsupported/corrupt tags fail explicitly; MP4/Vorbis chapters and embedded artwork extraction are not implemented.
+
 An original porcelain/ink/vermilion interface replaces the large introductory layout. The persistent transport stays available while browsing; mobile navigation, keyboard focus, dark mode and reduced motion are supported. Main-screen compatibility disclaimers are removed; attribution, consent and service requirements remain in Credits/settings.
 
 Additional tools: queue shuffle/lock/keep-sorted and insertion policies; title-based automatic-download filters and fresh-episode queue rules; local file/folder selection with content deduplication; measured per-show/daily statistics and separate history/statistics resets; fyyd search and website-advertised feed discovery. Downloaded audio can be analyzed locally for measured silence skipping and bounded quiet-audio gain. Gain playback is a temporary mono 16 kHz derivative, not destructive editing or broadcast loudness normalization; original recordings are retained.
@@ -51,10 +57,10 @@ The discovered project is `/home/hermes/projects/AntennaPod`, version `3.12.1-tr
 | Paired reader, playback follow, timestamps, lookup | Implemented in browser; translated words have segment timing only. |
 | Keystore-encrypted persistent provider keys | Session-memory keys only; intentionally no persistent key storage. |
 | WorkManager, Wi-Fi-only / charging constraints | Foreground queue only. Browser/OS may suspend the tab. No guaranteed screen-off work, background notification service or automatic resumable Android jobs. |
-| Podcast management and downloaded episodes | Browser RSS/Atom subscriptions/discovery, inbox, queue, favorites, downloads, history, statistics, OPML and ZIP backups; publisher transcript/chapter discovery and loading. Browser CORS, storage quotas and codecs apply. Android database backups and cross-device sync are not implemented. |
+| Podcast management and downloaded episodes | Browser RSS/Atom subscriptions/discovery, inbox, queue, favorites, downloads, history, statistics, OPML and ZIP backups; publisher transcript/chapter discovery and loading. Browser CORS, storage quotas and codecs apply. Android database backups are not supported; cross-device subscription/progress exchange uses your compatible sync server. |
 | Native codecs and streaming decode | Browser-supported audio formats; browser decoding requires the full compressed file and decoded audio in memory. Local/Whisper-compatible audio has a one-hour / 256 MB decoded-sample limit; native hosted diarization adapters upload the original file within your upload budget. Large files are bounded/rejected, but decoding can still stress browser memory. |
 
-This is a standalone podcast-and-study application, **not a claim of full AntennaPod application parity**. Gpodder sync, authenticated private feeds, native Cast/Android Auto/Wear OS/widgets, genuine streaming loudness normalization and some advanced parser policies remain unsupported. Measured local silence skipping and quiet-audio gain, plus advanced queue policies, are implemented. These are listed explicitly, not represented by inert controls; see [SOURCE-PARITY.md](SOURCE-PARITY.md).
+This is a standalone podcast-and-study application, **not a claim of full AntennaPod application parity**. Native Cast/Android Auto/Wear OS/widgets, genuine streaming loudness normalization and some advanced parser policies remain unsupported. Sync and authenticated feeds require compatible CORS/cookie policies and session authorization; they are not server-independent guarantees. Measured local silence skipping and quiet-audio gain, plus advanced queue policies, are implemented. These are listed explicitly, not represented by inert controls; see [SOURCE-PARITY.md](SOURCE-PARITY.md).
 
 ## Develop and reproduce
 

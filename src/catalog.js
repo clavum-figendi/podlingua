@@ -24,6 +24,8 @@ function subscriptionRow(input){
  for(const k of ['id','url','title','titleOverride','description','author','image','link','language'])if(k in input)out[k]=boundedString(input[k],k==='description'?100000:10000);
  if('id' in out){const url=safeUrl(out.id);if(!url)throw new Error('Invalid HTTPS subscription URL.');out.id=url;}
  if('url' in out){out.url=safeUrl(out.url);if(!out.url)throw new Error('Invalid HTTPS subscription URL.');}
+ for(const key of ['newFeedUrl','nextPageUrl'])if(key in input)out[key]=safeUrl(input[key]);
+ if(Array.isArray(input.funding))out.funding=input.funding.slice(0,100).map(f=>({url:safeUrl(f.url),title:boundedString(f.title,300)})).filter(f=>f.url);
  for(const k of ['image','link'])if(k in out)out[k]=safeUrl(out[k]);
  if('tags' in input)out.tags=[...new Set((Array.isArray(input.tags)?input.tags:[]).filter(x=>typeof x==='string').map(x=>x.slice(0,100)))].slice(0,100);
  for(const k of ['explicit','autoDownload','autoDelete','keepUpdated','includeInQueue'])if(k in input)out[k]=!!input[k];
@@ -53,8 +55,9 @@ function cleanState(input){
 export async function getAppState(){return cleanState(await read('state','app'));}
 export async function mutateAppState(fn){if(typeof fn!=='function')throw new Error('A synchronous state mutator is required.');return change('state','app',current=>{const state=cleanState(current),result=fn(state);if(result?.then)throw new Error('State mutators must be synchronous.');return cleanState(result===undefined?state:result);});}
 export async function setAppState(patch){return mutateAppState(current=>({...current,...patch}));}
-async function mergeFeed(feed,generation,requireExisting=false){return feedLock(feed.id,async()=>{
+async function mergeFeed(feed,generation,requireExisting=false,expectedUrl,archive=false){return feedLock(feed.id,async()=>{
  if(await feedGeneration(feed.id)!==generation||(requireExisting&&!await read('subscriptions',feed.id)))throw new Error('Subscription changed or was unsubscribed while fetching. Refresh explicitly.');
+ if(expectedUrl&&((await read('subscriptions',feed.id))?.url||feed.id)!==expectedUrl)throw new Error('Subscription URL changed while fetching. Retry explicitly.');
  const existing=(await listEpisodes()).filter(e=>e.feedId===feed.id),previousIds=existing.map(e=>e.id),saved=[];
  for(const incoming of feed.episodes){
  const match=existing.find(e=>e.id===incoming.id||(incoming.guid&&e.guid===incoming.guid)||(incoming.audioUrl&&e.audioUrl===incoming.audioUrl));const id=match?.id||incoming.id;
@@ -66,10 +69,15 @@ async function mergeFeed(feed,generation,requireExisting=false){return feedLock(
  try{result=await saveEpisode({...current,...metadata,createdAt:current?.createdAt||Date.now()});break;}catch(error){if(attempt===3||!/changed|deleted in another tab/i.test(error.message))throw error;}
  }const i=existing.findIndex(e=>e.id===result.id);if(i>=0)existing[i]=result;else existing.push(result);const j=saved.findIndex(e=>e.id===result.id);if(j>=0)saved[j]=result;else saved.push(result);
  }
+ if(archive){const latest=await read('subscriptions',feed.id);for(const field of ['title','description','author','image','link','language','funding','newFeedUrl']){if(Object.hasOwn(latest,field))feed[field]=latest[field];else delete feed[field];}}
  const subscription=await saveSubscription({...feed,episodeCount:saved.length,updatedAt:Date.now(),lastRefresh:Date.now()});const {applyFreshEpisodePolicy}=await import('./parity.js');await applyFreshEpisodePolicy(subscription,saved,previousIds,await listEpisodes(),{currentId:(await getAppState()).lastEpisodeId});return {...feed,...subscription,episodes:saved};
 });}
-export async function subscribe(url,options={}) {const id=safeUrl(url);if(!id)throw new Error('Invalid HTTPS subscription URL.');const generation=await feedLock(id,()=>feedGeneration(id));return mergeFeed(await fetchFeed(id,options),generation);}
-export async function refreshSubscription(id,options={}) {const snapshot=await feedLock(id,async()=>({subscription:await read('subscriptions',id),generation:await feedGeneration(id)}));if(!snapshot.subscription)throw new Error('Subscription no longer exists.');return mergeFeed(await fetchFeed(snapshot.subscription.url,options),snapshot.generation,true);}
+export async function subscribe(url,options={}) {const id=safeUrl(url);if(!id)throw new Error('Invalid HTTPS subscription URL.');const snapshot=await feedLock(id,async()=>({generation:await feedGeneration(id),existing:await read('subscriptions',id)}));const source=snapshot.existing?.url||id;return mergeFeed(canonicalFeed(await fetchFeed(source,options),id,source),snapshot.generation,!!snapshot.existing,source);}
+const canonicalFeed=(feed,id,url)=>({...feed,id,url,episodes:feed.episodes.map(e=>({...e,feedId:id}))});
+async function snapshotFeed(id){const snapshot=await feedLock(id,async()=>({subscription:await read('subscriptions',id),generation:await feedGeneration(id)}));if(!snapshot.subscription)throw new Error('Subscription no longer exists.');return snapshot;}
+export async function refreshSubscription(id,options={}) {const {subscription,generation}=await snapshotFeed(id);return mergeFeed(canonicalFeed(await fetchFeed(subscription.url,options),id,subscription.url),generation,true,subscription.url);}
+export async function relocateSubscription(id,url,options={}){url=safeUrl(url);if(!url)throw new Error('Use a valid HTTPS feed URL.');const {subscription,generation}=await snapshotFeed(id);const feed=await fetchFeed(url,options);return mergeFeed({...canonicalFeed(feed,id,url),newFeedUrl:''},generation,true,subscription.url);}
+export async function loadArchivePage(id,options={}){const {subscription,generation}=await snapshotFeed(id);if(!subscription.nextPageUrl)throw new Error('No archive page advertised.');const page=await fetchFeed(subscription.nextPageUrl,options);return mergeFeed({...canonicalFeed(page,id,subscription.url),nextPageUrl:page.nextPageUrl||''},generation,true,subscription.url,true);}
 export async function unsubscribe(id,{removeEpisodes=false}={}) {return feedLock(id,async()=>{
  await invalidateSubscription(id);
  if(removeEpisodes){const episodes=(await listEpisodes()).filter(e=>e.feedId===id);for(const e of episodes)await deleteEpisode(e.id);const removed=new Set(episodes.map(e=>e.id));await mutateAppState(s=>({...s,queue:s.queue.filter(x=>!removed.has(x)),...(removed.has(s.lastEpisodeId)?{lastEpisodeId:''}:{})}));}

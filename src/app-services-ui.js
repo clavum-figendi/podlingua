@@ -1,5 +1,6 @@
 import {createBackup,parseBackup,fetchMedia,downloadEpisode,removeDownload,publisherTranscript} from './library-services.js';
 import {getEpisode,saveEpisode,listEpisodes} from './storage.js';
+import {parseID3Chapters} from './media-tags.js';
 export function initAppServices(bridge){
  const backup=document.createElement('dialog');backup.id='backup-dialog';
  // Static trusted interface markup; user/feed strings are only assigned with textContent.
@@ -25,7 +26,8 @@ export function initAppServices(bridge){
    const db=await import('./catalog.js'),state=await db.getAppState();const saved=await publisherTranscript(id,{proxy:state.settings?.proxy,allowProxy:state.settings?.allowProxy});await bridge.openEpisode(id);bridge.status('Publisher transcript imported without speech recognition or audio upload.');return saved;
   },
   async loadChapters(id){
-   const episode=await getEpisode(id);if(!episode)throw new Error('Episode was deleted.');if(episode.chapters?.length||!episode.chaptersUrl)return episode;
+   const episode=await getEpisode(id);if(!episode)throw new Error('Episode was deleted.');if(episode.chapters?.length)return episode;
+   if(!episode.chaptersUrl){if(!episode.audio)return episode;const chapters=parseID3Chapters(await episode.audio.slice(0,16*1024*1024+10).arrayBuffer());if(!chapters.length)return episode;const fresh=await getEpisode(id);if(!fresh)throw new Error('Episode was deleted.');const saved=await saveEpisode({...fresh,chapters});bridge.onSaved?.(saved);return saved;}
    const db=await import('./catalog.js'),{parseChapters}=await import('./podcasts.js'),state=await db.getAppState();
    const blob=await fetchMedia(episode.chaptersUrl,{maxMB:5,proxy:state.settings?.proxy,allowProxy:state.settings?.allowProxy});
    const fresh=await getEpisode(id);if(!fresh)throw new Error('Episode was deleted.');const saved=await saveEpisode({...fresh,chapters:parseChapters(JSON.parse(await blob.text()))});bridge.onSaved?.(saved);return saved;
