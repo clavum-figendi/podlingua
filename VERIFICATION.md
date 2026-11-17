@@ -2,7 +2,7 @@
 
 ## Executed locally against the production Vite build
 
-- `npm test`: 106 passing Node tests (document parsing/validation/export, Android JSON compatibility, overlap, Unicode tokenization, IndexedDB audio persistence and credential exclusion, provider request/response contracts, consent and URL validation, native ASR upload/poll seams, word punctuation/speaker fidelity, local-worker factory contracts).
+- `npm test`: 107 passing Node tests (document parsing/validation/export, Android JSON compatibility, overlap, Unicode tokenization, IndexedDB audio persistence and credential exclusion, provider request/response contracts, consent and URL validation, native ASR upload/poll seams, word punctuation/speaker fidelity, local-worker factory contracts).
 - `npm run build`: successful production build with GitHub Pages `/podlingua/` base and dedicated module worker.
 - `npm run test:ui`: 64 passing Chromium Playwright tests: 8 explicitly isolated study-guide component fixtures alongside the production-interface and existing component regression checks. Exercises actual UI/import/audio playback/seek/synchronization/export/reload/library persistence, responsiveness at 390px, RTL, HTML-injection inertness, consent, nonpersistent keys, Google attribution independent of current settings, sequential queues, cancellation and stale result replacement/deletion.
 - `npm audit`: zero reported vulnerabilities at verification time. This is not a comprehensive security certification.

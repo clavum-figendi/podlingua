@@ -20,6 +20,8 @@ Endpoints: `GET /health`, `POST /fetch` with JSON `{ "url": "https://…" }`, an
 
 ## Operations
 
+On a device connected to this tailnet, MagicDNS resolves the relay hostname to a tailnet address. Chromium can require the site's **local-network access** permission; denying it blocks the request before the server sees it. Do not disable browser security. An Internet client uses the public Funnel addresses and needs no local-network permission. The live smoke can use `RELAY_PUBLIC_IP` with a current public DNS answer to exercise that public route from a tailnet test host, without disabling TLS or CORS. Both the public route and the permission-granted tailnet route were checked.
+
 Deployment service: `systemctl --user status podlingua-audio-relay.service`. State: `/home/hermes/.local/state/podlingua-audio-relay/budget.json`. Only expose port 8791 via the dedicated Funnel path; do not expose the dashboard or arbitrary localhost destinations.
 
 Graceful shutdown removes the lifetime `.lock`. After an abrupt crash, startup deliberately fails closed rather than risking concurrent quota writers. Before removing a stale `.lock` or `.tmp`, stop the service and verify **no relay process remains**, preserve the ledger and `.initialized` marker, inspect the state, then restart. Never delete/reset the budget to hide failed transfers. Missing/corrupt state and backwards system-clock changes fail closed.
