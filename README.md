@@ -1,6 +1,6 @@
 # Podlingua
 
-An **unofficial, independent browser adaptation** of the transcription/translation workflow developed in a local experimental AntennaPod fork. Not AntennaPod, not an official AntennaPod release, and not affiliated with or endorsed by any model or API provider.
+An **unofficial, independent browser podcast manager** with the transcription/translation workflow developed in a local experimental AntennaPod fork. Not AntennaPod, not an official AntennaPod release, and not affiliated with or endorsed by any model or API provider.
 
 - App: https://clavum-figendi.github.io/podlingua/
 - Corresponding web source: https://github.com/clavum-figendi/podlingua
@@ -12,7 +12,9 @@ An **unofficial, independent browser adaptation** of the transcription/translati
 
 Import local podcast/audio files, generate timed transcripts, translate them while retaining segment alignment, and study both languages alongside playback. Import publisher or exported transcripts in JSON, SRT or WebVTT (including the Android fork's millisecond JSON format). Preserve supplied speaker labels, punctuation, overlap, original word timings and translation metadata. Search, follow playback, seek timestamps, adjust reading layout/font size, perform short-token translation lookup, and export JSON/SRT/VTT/text. The local library stores audio and transcripts in this browser's IndexedDB. Multiple files can be processed sequentially while the tab remains open.
 
-No audio is sent to GitHub. GitHub Pages serves static app assets only. Local inference downloads models from Hugging Face and the numerical runtime may fetch WebAssembly assets; it then processes your audio/text in your browser. The first model download is not offline and can be substantial. Model caching is browser-managed and may be evicted. This release does **not** promise an offline-cached application shell or first-launch offline operation.
+Discover podcasts in Apple's public directory/top lists, subscribe to RSS/Atom URLs or import feed files, organize subscriptions by names/tags, browse an inbox, search/sort/filter episodes, bulk-edit favorites/played/archive state, and manage a persistent listening queue. Stream audio/video, download publisher media, resume playback, set speed and per-show intro/outro skips, seek chapters, save bookmarks, use sleep timers and A/B loops, and view real listening history/statistics. OPML exchanges subscriptions; portable ZIP backups optionally include saved audio plus transcripts, state and preferences. Restore deliberately disables proxy access and automatic network requests until freshly authorized. Foreground refresh/download is opt-in, with global and per-show settings and a retained-download count cap. See [the source-backed feature inventory](SOURCE-PARITY.md) for exact differences from AntennaPod.
+
+No audio is sent to GitHub. GitHub Pages serves static app assets only. Local inference downloads models from Hugging Face and the numerical runtime may fetch WebAssembly assets; it then processes your audio/text in your browser. The first model download is not offline and can be substantial. Model caching is browser-managed and may be evicted. “Enable offline app” explicitly downloads and verifies the application shell. After that successful online setup, saved audio and transcripts can be used after an offline reload. Models are separate downloads; offline inference depends on their browser cache and is not guaranteed by shell readiness. First-launch offline operation, permanent storage and OS background execution are not promised. Feeds and remote media require network access unless previously downloaded.
 
 ### Engines
 
@@ -43,10 +45,10 @@ The discovered project is `/home/hermes/projects/AntennaPod`, version `3.12.1-tr
 | Paired reader, playback follow, timestamps, lookup | Implemented in browser; translated words have segment timing only. |
 | Keystore-encrypted persistent provider keys | Session-memory keys only; intentionally no persistent key storage. |
 | WorkManager, Wi-Fi-only / charging constraints | Foreground queue only. Browser/OS may suspend the tab. No guaranteed screen-off work, background notification service or automatic resumable Android jobs. |
-| Android's full podcast manager and downloaded episodes | Import local audio/transcript files. RSS subscriptions/discovery, Android database access, automatic publisher-transcript discovery and cross-device sync are not implemented. |
+| Podcast management and downloaded episodes | Browser RSS/Atom subscriptions/discovery, inbox, queue, favorites, downloads, history, statistics, OPML and ZIP backups; publisher transcript/chapter discovery and loading. Browser CORS, storage quotas and codecs apply. Android database backups and cross-device sync are not implemented. |
 | Native codecs and streaming decode | Browser-supported audio formats; browser decoding requires the full compressed file and decoded audio in memory. Local/Whisper-compatible audio has a one-hour / 256 MB decoded-sample limit; native hosted diarization adapters upload the original file within your upload budget. Large files are bounded/rejected, but decoding can still stress browser memory. |
 
-This is a working web counterpart for the transcript/translation workflow, **not a claim of full AntennaPod application parity**.
+This is a standalone podcast-and-study application, **not a claim of full AntennaPod application parity**. Gpodder sync, authenticated private feeds, native Cast/Android Auto/Wear OS/widgets, silence skipping, volume normalization and some advanced queue/parser policies remain unsupported. These are listed explicitly, not represented by inert controls; see [SOURCE-PARITY.md](SOURCE-PARITY.md).
 
 ## Develop and reproduce
 

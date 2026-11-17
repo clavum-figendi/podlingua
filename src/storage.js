@@ -1,4 +1,5 @@
 let database;
+export const episodeMetadataFields=['feedId','guid','audioUrl','image','description','published','duration','website','transcripts','chaptersUrl','chapters','season','episodeNumber','explicit','favorite','played','archived','position','playedAt','bookmarks','downloadedAt','mediaType','listenedSeconds'];
 async function openDatabase() {
   if (!globalThis.indexedDB) throw new Error('IndexedDB is unavailable. Use a normal browser window with site storage enabled.');
   if (!database) database = new Promise((resolve,reject)=>{
@@ -41,7 +42,9 @@ export async function saveEpisode(episode) {
     read.onsuccess=()=>{
       const current=withRevision(read.result);
       if((current?.revision ?? null)!==expectedRevision){failure=new Error('Episode changed or was deleted in another tab. Result not saved.');tx.abort();return;}
-      saved={id,title,audio,doc,createdAt,revision:crypto.randomUUID()};store.put(saved);
+      saved={id,title,audio,doc,createdAt,revision:crypto.randomUUID()};
+      for(const field of episodeMetadataFields)if(Object.hasOwn(episode,field))saved[field]=episode[field];
+      store.put(saved);
     };
     tx.oncomplete=()=>resolve(saved);
     tx.onabort=()=>reject(failure || new Error('Local library write failed. Check storage quota and permissions.'));

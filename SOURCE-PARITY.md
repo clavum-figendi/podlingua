@@ -1,0 +1,63 @@
+# AntennaPod → Podlingua source-parity inventory
+
+This is a source-backed inventory, **not a claim of complete AntennaPod parity**. Domain-layer rows have fixture/unit evidence; browser evidence is described separately below. Original Android files were read, not modified. Source root: `../AntennaPod`; paths below refer to that checkout. The upstream reference is [AntennaPod commit b2766f04f56a1788e2f82f20591c490a1c6f11d3](https://github.com/AntennaPod/AntennaPod/tree/b2766f04f56a1788e2f82f20591c490a1c6f11d3).
+
+## Evidence and scope
+
+Module READMEs were read before Java sources: `net/discovery/README.md`, `parser/README.md`, `parser/feed/README.md`, `model/README.md`, `storage/README.md`, `storage/database/README.md`, `storage/importexport/README.md`, `app/README.md`, `playback/service/README.md`.
+
+Source shorthand:
+
+- **Discovery**: `net/discovery/src/main/java/de/danoeh/antennapod/net/discovery/{ItunesPodcastSearcher,ItunesTopListLoader,FyydPodcastSearcher,PodcastIndexPodcastSearcher}.java`. Apple search and lookup/top-list resolution; fyyd is a distinct provider; Podcast Index signs authenticated requests with a secret.
+- **Parser**: `parser/feed/src/main/java/de/danoeh/antennapod/parser/feed/FeedHandler.java`, `namespace/{Rss20,Atom,Itunes,PodcastIndex,Content,Media,DublinCore,SimpleChapters}.java`, `PodcastIndexChapterParser.java`. RSS/Atom handling is separate from rendering; iTunes duration/author/image/summary/new-feed-url, Podcasting 2.0 transcript/chapters/funding/social interactions and simple chapter namespace are distinct capabilities.
+- **Preferences**: `model/src/main/java/de/danoeh/antennapod/model/feed/FeedPreferences.java` (fields around lines 111–125): filters, keep-updated, auto-download, auto-delete, volume adaptation, new episode action, credentials, speed, intro/ending skips, silence skipping, notification toggle, tags. `Feed` carries custom title and subscription state.
+- **Storage**: `storage/database/src/main/java/de/danoeh/antennapod/storage/database/DBWriter.java`: queue insertion/removal/reorder/move/clear, favorites, played state, playback history, download log, feed preferences/custom title, statistics reset. `ItemEnqueuePositionCalculator.java`: back/front/after-current/random placement. `app/src/main/java/de/danoeh/antennapod/ui/screen/queue/QueueFragment.java`: queue lock, drag reorder, keep-sorted and shuffle. `app/src/main/java/de/danoeh/antennapod/ui/screen/PlaybackHistoryFragment.java`: completion-date order, clear history.
+- **OPML**: `storage/importexport/src/main/java/de/danoeh/antennapod/storage/importexport/{OpmlReader,OpmlWriter,OpmlBackupAgent}.java`: feed-list import/export differs from full database backup.
+- **Native architecture**: playback service README names Media3/ExoPlayer as active implementation; app README identifies Wear OS messaging. Module READMEs identify cast, widgets, sync, download service, media parsing and transcript UI as separate surfaces.
+
+## Domain layer implemented and tested
+
+- [x] RSS 2.0 and Atom feeds; namespace-aware iTunes metadata (including legacy namespace), content descriptions, relative/XML-base URLs, canonical feed URL identity.
+- [x] Stable bounded episode IDs; GUID-first identity with enclosure fallback; playable audio/video enclosure preference over image enclosures; feed/episode artwork, publication time, duration, season/episode, explicit flag.
+- [x] Podcasting 2.0 transcript URL/type/language and chapters URL; namespace aliases. Inline simple chapters are parsed. Existing transcript documents/speaker/timing imports are never re-parsed by the feed layer.
+- [x] JSON chapters with bounded count and finite chronological seconds; optional safe chapter links/artwork.
+- [x] Plain-text descriptions; no feed HTML rendering. DTD/entity declarations, oversized XML/responses, unsafe schemes and URL credentials rejected. No arbitrary remote scripts or JSONP.
+- [x] Direct public Apple search, missing-feed lookup and country top-list domain APIs; fixture-backed, **not a guarantee Apple permits every browser origin or region**. No fabricated/preset directory results.
+- [x] Direct HTTPS feed/resource fetch, abort/timeout, bounded stream reads, omitted cookies/credentials and no referrer. No silent proxy fallback. A custom `{url}` template requires explicit permission; the proxy sees the full private feed URL.
+- [x] OPML nested folder tags, dedupe, escaped title/URL/category export and import roundtrip. This is subscription-list exchange, not a full audio/transcript backup.
+- [x] Separate IndexedDB `podlingua-podcasts` subscription and application-state stores; editable title override, tags, speed and skip preferences, optional download flags. Metadata refresh does not reset preferences.
+- [x] Foreground subscribe/refresh merges metadata into the existing episode library while preserving user audio blobs, transcript documents, position, played/favorite/archive state and revisions. CAS conflicts retry from a fresh record. Episodes missing from a later feed are retained.
+- [x] Unsubscribe retains episodes by default; explicit remove-episodes also cleans queue references. Cross-database operations are recoverable/idempotent but are **not one atomic transaction** across catalog and episode databases. Feed merges/unsubscribe are serialized across tabs by Web Locks, and persisted generations reject pending refreshes after unsubscribe/resubscribe; browsers without Web Locks cannot perform those subscription mutations safely and receive an explicit error.
+- [x] Atomic top-level application-state patch and synchronous transaction mutator; deduplicated queue, last episode, allowlisted settings, bounded download log, listening/media/played statistics and daily history. Unknown nested credential fields are dropped. Proxy URL credentials/auth-like query keys are not persisted. Feed URLs may intentionally contain private subscription tokens and remain local.
+
+Tests: `node --test tests/podcasts.test.js tests/catalog.test.js`. Tests use actual XML/JSON fixture strings and fake IndexedDB, with injected fetch responses for deterministic transport behavior. They do not claim live network or UI coverage.
+
+## Browser integration status
+
+Production-build Chromium tests exercise the integrated app, not source-module substitutes. Directory/feed/media fixtures are explicitly routed test responses; genuine network/inference checks are recorded separately in `VERIFICATION.md`.
+
+| Browser workflow | Implementation and evidence |
+|---|---|
+| Discovery and subscriptions | Search and top-list screens, URL subscribe, feed-file fallback, subscription grid, tag filtering, custom names, preferences, refresh and unsubscribe. UI tests cover fixture subscribe/refresh/preference retention and error reporting. Tags are labels, not a nested folder filesystem. |
+| Episode organization | Inbox, text search, date/title/duration sorting, played/favorite/downloaded/archive filtering, 25-item pages, bounded selections and confirmed bulk actions. UI tests cover selection, favorites, queue changes and inert untrusted notes. Inbox means unplayed/unarchived, not every Android new-state distinction. |
+| Queue | Persisted deduplicated add/front-next/remove/up/down/clear, completion continuation and skip-completed setting. Pure tests cover eligibility; browser tests cover persistence/reorder. Advanced shuffle/lock/keep-sorted and other enqueue placement policies are **not implemented**. |
+| Playback | Browser audio/video controls, resume position, global/per-feed rate and intro/outro, skip buttons, chapters, sleep timers, bookmarks, A/B loop, Media Session, supported-browser PiP/fullscreen. Chromium tests exercise actual media progression, resume, bookmark seeking, timed pause and chapter seeking. Native hardware/OS/background guarantees are not tested. |
+| Downloads and automation | Bounded foreground download/progress/cancel/delete, log, per-show/global opt-in, retained-download cap and completed-download cleanup. UI tests cover downloaded Blob playback; clock-driven tests cover opt-in/zero/cap. No reliable closed-tab downloads or Android scheduling. Quota errors are reported; storage is not guaranteed. |
+| Transcript/translation | Publisher-advertised transcript fetch, JSON/SRT/VTT import/export, native schema compatibility, supplied speaker/word timing, real local inference and optional hosted protocols with consent. UI tests cover publisher VTT, attribution, playback synchronization, cancellation and stale results. No feed action invokes inference. |
+| Portability | OPML import/export UI; ZIP with audio/transcripts/bookmarks/subscriptions/state; legacy JSON restore. Unit tests roundtrip full backups and exclude credentials; Chromium exports an actual audio-inclusive ZIP. Restore disables proxy access and automatic network consent until explicitly authorized again. Not compatible with Android database backups. |
+| Offline | Opt-in install/repair, complete hashed shell cache verification, storage-persistence request, offline reload and saved-audio playback. Chromium removes a required cached asset and verifies readiness becomes false. Models have separate caches and are not part of shell readiness. |
+| History/statistics | Saved actual positions/completion and measured listening time; marking played does not synthesize listening. Pure tests reject seek/speed inflation; player/browser tests persist state. Clear-history/reset-statistics UI and detailed native statistics reports are not implemented. |
+| Layout | Reader and manager tested at 390px; escaped content, labelled controls, native dialogs and keyboard playback shortcuts. No claim of a full WCAG or screen-reader audit. |
+
+## Deliberate gaps versus Android, and native constraints
+
+- **Not implemented by this layer**: fyyd search, Podcast Index signed search, feed relocation/new-feed-url migration, paginated archive refresh, autodiscovery from HTML, funding/social-interaction links, full Media RSS/DC metadata support, embedded media chapters/ID3 extraction, Android database backup compatibility, synchronization/gpodder, local folders, streaming authentication, OPML scheduled backup.
+- **Not equivalent to storing flags**: volume adaptation, silence skipping, episode notifications, advanced new-episode actions, include/exclude download filters, Wi-Fi/battery scheduling and cleanup algorithms need actual browser implementations and tests before claiming parity.
+- GitHub Pages has no server-side CORS bypass or secret storage. Some HTTPS feeds, enclosures, chapter files and directories refuse browser CORS. HTTP remote feeds are deliberately rejected (mixed-content/security). No shared proxy or embedded directory credential is included. Private feeds requiring HTTP Basic authentication are unsupported.
+- Browser playback/download depends on codecs, server range/CORS support, memory, browser permissions and quota. IndexedDB/offline data can be evicted. Downloading requires foreground app execution; browser/service-worker lifetime cannot reproduce Android's reliable background downloads or scheduled refresh.
+- Media Session/PWA installation is best effort, not Android foreground-service parity. Native Cast/Chromecast, Android Auto, Wear OS, homescreen widgets, system alarm scheduling, Android intents/file-provider sharing, battery/network integration and Android notification actions are not promised by a static web app.
+- Complete AntennaPod parity is therefore **not achieved** by these domain APIs or by a standalone static browser application alone. Any release statement must distinguish verified web replacements, unchecked integration, unsupported features and native-only surfaces.
+
+## API integration notes
+
+`fetchResource(url, opts)` returns a bounded **Response** (`.text()`, `.json()`, `.blob()`, `.arrayBuffer()`); default limit 8 MiB, optional `maxBytes` up to 512 MiB. No credentials, `Authorization` headers or custom request headers are accepted. `fetchFeed` returns parsed metadata. `subscribe` / `refreshSubscription` return that feed with saved/revisioned episode records. `saveSubscription` accepts partial updates when `id` exists. `mutateAppState(fn)` runs synchronously inside one IndexedDB write transaction; return a replacement state or mutate the supplied state. `setAppState(patch)` merges **top-level only**: callers updating settings must merge settings themselves, or use the atomic mutator.

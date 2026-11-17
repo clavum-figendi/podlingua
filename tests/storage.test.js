@@ -11,3 +11,8 @@ test('library schema excludes settings, consent and session keys',async()=>{
  await saveEpisode({id:'secrets-test',title:'Safe',createdAt:1,key:'test-only-not-a-real-key',settings:{key:'hidden'},allowCloud:true});
  const saved=await getEpisode('secrets-test');assert.equal(saved.key,undefined);assert.equal(saved.settings,undefined);assert.equal(saved.allowCloud,undefined);await deleteEpisode('secrets-test');
 });
+test('podcast metadata and listening state survive a transcript-only update',async()=>{
+ const initial=await saveEpisode({id:'podcast-state',title:'Episode',audioUrl:'https://example.org/audio.mp3',feedId:'https://example.org/feed',position:42,favorite:true,played:false,bookmarks:[{id:'one',position:12,label:'Quote'}],transcripts:[{url:'https://example.org/t.vtt',type:'text/vtt'}]});
+ await saveEpisode({...initial,doc:{language:'en',segments:[]}});const out=await getEpisode(initial.id);
+ assert.equal(out.position,42);assert.equal(out.favorite,true);assert.equal(out.audioUrl,initial.audioUrl);assert.deepEqual(out.bookmarks,initial.bookmarks);await deleteEpisode(initial.id);
+});

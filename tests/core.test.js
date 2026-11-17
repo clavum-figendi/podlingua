@@ -37,3 +37,7 @@ test('model provenance survives validation and JSON export',()=>{
  const doc=normalizeDocument({model:'Xenova/whisper-tiny',translationModel:'Xenova/opus-mt-en-fr',language:'en',segments:[]});
  assert.equal(doc.model,'Xenova/whisper-tiny');assert.equal(JSON.parse(exportTranscript(doc)).translationModel,'Xenova/opus-mt-en-fr');
 });
+test('publisher Podcasting 2.0 JSON preserves actual cue times and speaker text',()=>{
+ const doc=parseTranscript(JSON.stringify({version:'1.0.0',segments:[{startTime:1.25,endTime:2.5,body:'Hello podcast.',speaker:'Host'}]}),'publisher.json');
+ assert.deepEqual(doc.segments[0],{start:1.25,end:2.5,text:'Hello podcast.',speaker:'Host'});
+});

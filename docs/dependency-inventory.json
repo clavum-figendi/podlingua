@@ -203,6 +203,16 @@
     }
   },
   {
+    "name": "@xmldom/xmldom",
+    "version": "0.9.12",
+    "license": "MIT",
+    "dev": false,
+    "repository": {
+      "type": "git",
+      "url": "git://github.com/xmldom/xmldom.git"
+    }
+  },
+  {
     "name": "adm-zip",
     "version": "0.6.1",
     "license": "MIT",
@@ -288,6 +298,13 @@
       "type": "git",
       "url": "git+https://github.com/thecodrr/fdir.git"
     }
+  },
+  {
+    "name": "fflate",
+    "version": "0.8.3",
+    "license": "MIT",
+    "dev": false,
+    "repository": "https://github.com/101arrowz/fflate"
   },
   {
     "name": "flatbuffers",

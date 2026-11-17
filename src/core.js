@@ -12,11 +12,11 @@ export function normalizeDocument(input) {
   if (!input || !Array.isArray(input.segments) || input.segments.length > 100000) throw new Error('Expected a bounded transcript segments array');
   let previous = -1;
   const segments = input.segments.map(s => {
-    const start = time(s.start ?? (s.startMs == null ? undefined : s.startMs / 1000));
-    const end = time(s.end ?? (s.endMs == null ? undefined : s.endMs / 1000));
+    const start = time(s.start ?? s.startTime ?? (s.startMs == null ? undefined : s.startMs / 1000));
+    const end = time(s.end ?? s.endTime ?? (s.endMs == null ? undefined : s.endMs / 1000));
     if (end < start || start < previous) throw new Error('Transcript segments must be chronological; overlaps are allowed');
     previous = start;
-    const result = {start, end, text: optionalText(s.text) ?? ''};
+    const result = {start, end, text: optionalText(s.text ?? s.body) ?? ''};
     for (const field of ['speaker', 'translation']) {
       const v = optionalText(s[field], field === 'speaker' ? 128 : MAX_TEXT);
       if (v != null) result[field] = v;
