@@ -1,5 +1,7 @@
 # Restricted audio relay
 
+**Retired deployment:** the Paloma relay was stopped and disabled, and its Funnel path removed at the owner's request. The app no longer has its endpoint configured. The code below is a historical implementation/reference, not authorization to redeploy on personal infrastructure. A separately hosted serverless replacement requires an approved account and verified cost controls.
+
 The web app remains on GitHub Pages. A separate optional, explicitly authorized relay retrieves public recordings from `audio.podigee-cdn.net` and `adswizz.podigee-cdn.net` when those servers do not permit browser CORS. It is not an arbitrary proxy, an inference endpoint, or an access-control bypass. No provider keys or user cookies are accepted or forwarded.
 
 ## Run
