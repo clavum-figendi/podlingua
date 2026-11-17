@@ -15,7 +15,7 @@ export async function fetchMedia(url,{signal,maxMB=200,onProgress=()=>{},fetchFn
   if(signal?.aborted)abort();else signal?.addEventListener('abort',abort,{once:true});
   try{
     controller.signal.throwIfAborted();
-    let response;try{response=await fetchFn(target,{signal:controller.signal,credentials:'omit',referrerPolicy:'no-referrer',redirect:'follow'});}catch(error){if(controller.signal.aborted)throw controller.signal.reason;throw new Error('Download blocked or unavailable. The publisher must allow browser CORS, or configure your own explicitly authorized proxy. No automatic retry.');}
+    let response;try{response=await fetchFn(target,{signal:controller.signal,credentials:'omit',referrerPolicy:'no-referrer',redirect:'follow'});}catch(error){if(controller.signal.aborted)throw controller.signal.reason;const failure=new Error('This recording could not be copied directly. Open audio help to save and attach it, or use a publisher transcript.');failure.code='MEDIA_NETWORK_BLOCKED';throw failure;}
     if(!response.ok)throw new Error(`Download failed (HTTP ${response.status}).`);
     if(response.url)safePodcastURL(response.url);
     const declared=Number(response.headers.get('Content-Length'))||0,limit=maxMB*1024*1024;

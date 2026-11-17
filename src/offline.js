@@ -2,7 +2,11 @@ export function initOfflineUI(){
  const box=document.createElement('div'),button=document.createElement('button'),status=document.createElement('p');
  button.type='button';button.id='offline-enable';button.textContent='Enable offline app';status.id='offline-status';status.style.fontSize='10px';status.textContent='Offline shell not enabled';box.append(button,status);document.querySelector('.sidebar-bottom').prepend(box);
  let installPrompt;
- window.addEventListener('beforeinstallprompt',event=>{event.preventDefault();installPrompt=event;});
+ const installButton=document.createElement('button');installButton.type='button';installButton.textContent='Install app';installButton.hidden=true;box.append(installButton);
+ // Do not suppress the browser's native banner. A separate click owns installation.
+ window.addEventListener('beforeinstallprompt',event=>{installPrompt=event;installButton.hidden=false;});
+ window.addEventListener('appinstalled',()=>{installPrompt=null;installButton.hidden=true;});
+ installButton.onclick=()=>{if(!installPrompt)return;const event=installPrompt;installPrompt=null;installButton.hidden=true;try{const result=event.prompt();Promise.resolve(result).catch(()=>{status.textContent='Use your browser menu to install this app. Offline caching is separate.';});}catch{status.textContent='Use your browser menu to install this app. Offline caching is separate.';}};
  async function check(){
   try{
    const registration=await navigator.serviceWorker?.getRegistration(import.meta.env.BASE_URL);if(!registration?.active){status.textContent='Offline shell not enabled';return false;}
@@ -23,7 +27,7 @@ export function initOfflineUI(){
    await navigator.serviceWorker.ready;
    if(!await check())throw new Error('Not all required app assets were cached. Retry to repair.');
    navigator.storage?.persist?.().catch(()=>{});
-   if(installPrompt){await installPrompt.prompt();installPrompt=null;}
+
   }catch(error){status.textContent=error.message;throw error;}finally{button.disabled=false;}
  }
  button.onclick=()=>enable().catch(()=>{});window.podlinguaOffline={check,enable};

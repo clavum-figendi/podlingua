@@ -20,6 +20,7 @@ export function initSettingsExperience(){
   provider.addEventListener('change',()=>{mode.value=provider.value==='local'?'device':'online';if(provider.value!=='local')preferences[kind+'Hosted']=provider.value;preferences[kind+'Mode']=mode.value;save();});
   if(preferences[kind+'Mode']==='online')setProvider(kind,preferences[kind+'Hosted']||'groq');
   const stored=preferences[kind+'Model'];if(provider.value==='local'&&localModels.some(([k,id])=>k===kind&&id===stored))model.value=stored;
+  model.addEventListener('change',()=>{if(provider.value==='local'&&localModels.some(([k,id])=>k===kind&&id===model.value)){preferences[kind+'Model']=model.value;save();}});
  }
  $('offline-models-only').checked=preferences.offlineOnly===true;$('offline-models-only').onchange=()=>{preferences.offlineOnly=$('offline-models-only').checked;save();};
  const selected=()=>localModels.find(([,id])=>id===$('download-model').value);

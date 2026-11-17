@@ -10,6 +10,16 @@ An **unofficial, independent browser podcast manager** with the transcription/tr
 
 ## What it does
 
+### Guided transcript and translation actions
+
+Use **Create transcript** or **Translate** directly in an episode list or above the reader. The guide shows the selected episode, missing prerequisites, human-readable language choices, local model choices, explicit download/transfer permission, progress and cancellation. The primary action remains visible on narrow screens; advanced settings retain all provider/model/endpoint/key options. Available publisher transcripts can be imported from the same guide without speech recognition. Job errors and cancellation are not reported as successful completion.
+
+If a publisher blocks browser audio access, **Get audio for this episode** offers an explicit recovery: open the publisher recording, save it using the browser/player menu, then attach that saved audio to the existing episode. This preserves its identity, transcript and listening state. Failed URLs are not automatically retried during the page session; retry is explicit. This is a usable alternative, **not a CORS bypass**: GitHub Pages cannot change a publisher's headers. A user-authorized relay remains optional.
+
+**Install app** now invokes the browser install prompt directly from its own user click, separately from shell caching. The app no longer suppresses the native install banner. Browser/OS installation support varies.
+
+**Share episode** previews the exact text/link, optionally includes the current playback position, uses native sharing where available, and offers clipboard fallback. Saved audio can also be exported as a file. Review private subscription tokens and publisher rights before sharing.
+
 ### Discovery, onboarding and processing settings
 
 Discover now offers explicit topic suggestions, Apple/fyyd/Podcast Index selection, clear loading/empty/error states, retry/cancel and stale-result protection. Suggestions fill the search box; they do not silently send a query. Podcast Index uses your own session-only API credentials and documented request signing, with no shared key or proxy forwarding.

@@ -51,6 +51,9 @@ Production-build Chromium tests exercise the integrated app, not source-module s
 
 ## Additional source-backed workflows
 
+- Prominent guided Create transcript/Translate actions are available in episode lists and the reader, with readable language/model selection, permission and progress. Publisher transcript retrieval is exposed in the guide. Download failures offer save-and-attach recovery preserving episode identity; this does not bypass publisher CORS. Installation is a separate direct user gesture, not an automatic follow-up to caching.
+- Episode text/link sharing with optional measured playback position, native Web Share/clipboard fallback and saved-audio export follow the functional reference `app/src/main/java/de/danoeh/antennapod/ui/share/ShareUtils.java`. Browser implementation is independent; no Android FileProvider/Intent code is bundled. Private links require user review before sharing.
+
 - Discovery includes Apple, fyyd and signed Podcast Index searches, explicit topic suggestions and cancellable feedback. Podcast Index credentials remain in memory and cannot be proxied. Signing and UI tested with transport fixtures, not a live authenticated account.
 - Independent online/on-device modes, a dated sourced provider/offer/diarization comparison and a seven-model download library are integrated. Cache-only inference after offline reload was exercised with Whisper Tiny and OPUS en-fr. First-run onboarding is skippable/replayable/disableable; system sans-serif presentation retains required credits.
 
