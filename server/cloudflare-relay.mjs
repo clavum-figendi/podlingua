@@ -18,10 +18,10 @@ export async function handle(request,env={},fetcher=fetch){
  try{
   for(let hops=0;hops<=5;hops++){upstream=await fetcher(url,{method:'GET',redirect:'manual',headers:{Accept:'audio/*','Accept-Encoding':'identity'},signal:control.signal});if([301,302,303,307,308].includes(upstream.status)){const location=upstream.headers.get('Location');await upstream.body?.cancel();if(hops===5||!location)throw Error('redirect');url=media(new URL(location,url).href);continue;}break;}
   const type=upstream.headers.get('Content-Type')||'',raw=upstream.headers.get('Content-Length'),length=Number(raw);
-  if(upstream.status!==200||!/^audio\//i.test(type)||!raw||!/^\d+$/.test(raw)||!Number.isSafeInteger(length)||length<1||length>MAX||!upstream.body)throw Error('media');
+  if(upstream.status!==200||!/^audio\//i.test(type)||!raw||!/^\d+$/.test(raw)||!Number.isSafeInteger(length)||length<1||length>MAX||!upstream.body)throw Error('media_'+upstream.status+'_'+(raw?'sized':'unsized'));
   const reader=upstream.body.getReader();let total=0;
   const stream=new ReadableStream({async pull(controller){try{const {done,value}=await reader.read();if(done){if(total!==length)throw Error('length');clean();controller.close();return;}total+=value.byteLength;if(total>length)throw Error('size');controller.enqueue(value);}catch{clean();control.abort();await reader.cancel().catch(()=>{});controller.error(Error('Audio transfer interrupted'));}},async cancel(){clean();control.abort();await reader.cancel().catch(()=>{});}});
   return new Response(stream,{headers:{...headers,'Content-Type':type,'Content-Length':String(length)}});
- }catch{clean();control.abort();await upstream?.body?.cancel().catch(()=>{});return reply(502,'audio_unavailable');}
+ }catch(error){clean();control.abort();await upstream?.body?.cancel().catch(()=>{});const reason=/^(url|redirect|media_\d{3}_(un)?sized)$/.test(error.message)?error.message:'network';return reply(502,'audio_unavailable_'+reason);}
 }
 export default {fetch(request,env){return handle(request,env);}};

@@ -12,7 +12,7 @@ An **unofficial, independent browser podcast manager** with the transcription/tr
 
 ### Guided transcript and translation actions
 
-**Current relay status:** assisted download is temporarily disabled while moving away from personal infrastructure. Paloma's relay service and public route have been removed. Manual save/attach remains available; the relay implementation below describes the previous release, not a currently offered service.
+**Current relay status:** assisted download uses an independent Cloudflare Worker in the dedicated Podlingua account. Paloma's relay remains disabled and has no app connection. Cloudflare confirmed Workers Free during deployment; no paid upgrade was made. Users do not need a Cloudflare account or VPN. See `server/README.md` for current bounds and the distinction from the retired Node relay.
 
 Use **Create transcript** or **Translate** directly in an episode list or above the reader. The guide shows the selected episode, missing prerequisites, human-readable language choices, local model choices, explicit download/transfer permission, progress and cancellation. The primary action remains visible on narrow screens; advanced settings retain all provider/model/endpoint/key options. Available publisher transcripts can be imported from the same guide without speech recognition. Job errors and cancellation are not reported as successful completion.
 

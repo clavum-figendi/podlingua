@@ -1,6 +1,20 @@
 # Restricted audio relay
 
-**Retired deployment:** the Paloma relay was stopped and disabled, and its Funnel path removed at the owner's request. The app no longer has its endpoint configured. The code below is a historical implementation/reference, not authorization to redeploy on personal infrastructure. A separately hosted serverless replacement requires an approved account and verified cost controls.
+## Current deployment: Cloudflare Workers
+
+Source: `cloudflare-relay.mjs`. Endpoint: `https://podlingua-audio.clavum-figendi.workers.dev/fetch`. This runs in the dedicated Podlingua account, not the user's personal Cloudflare account or Paloma. The platform explicitly identified the account as **Workers Free** during deployment; no paid upgrade was made. The frontend remains on GitHub Pages.
+
+Upload this ES module as `worker.mjs` with the adjacent `cloudflare-metadata.json`, using the Cloudflare Workers multipart API. Enable only its workers.dev production URL, not previews. The metadata binds a Cloudflare rate limiter (six audio requests per IP per 60 seconds; distributed/best-effort, not a precise global counter). Free-plan request/CPU limits remain enforced by Cloudflare. This Worker does not use the former server's filesystem quota ledger, two-connection limit, or 1 GiB daily reservation budget.
+
+The Worker allows only the two Podigee HTTPS media hosts, revalidates redirects, forwards no credentials, requires an audio Content-Type and declared size no greater than 100 MiB, and checks streamed byte counts. It accepts an 8 KiB JSON POST, with a 240-second upstream-transfer deadline. Unknown-length responses are rejected. Normal platform fetch routing is used; no private-network bindings, user-supplied addresses, proxy settings or host overrides exist. Origin checks are not authentication. Cookies/API keys are never forwarded.
+
+Audio is streamed, not stored or sent to AI. Sampled Cloudflare request logs/traces are enabled with query-string redaction; no application code logs recording bodies. Cloudflare carries the media and processes infrastructure metadata. Model-download and inference permissions remain separate. The public site requires neither a user Cloudflare login nor a VPN/local-network permission.
+
+Verification: Node contract tests, live Cloudflare retrieval of the actual GAG581 recording, deployed-source hash comparison, and browser integration. Use `node scripts/relay-live-smoke.mjs` for the real publisher flow (downloads a full public recording; do not run in tight loops).
+
+## Retired Node deployment — historical reference only
+
+The Paloma relay was stopped and disabled, and its Funnel path removed. The app has no Paloma endpoint. The remaining sections document the **retired** `audio-relay.mjs`, not the active Cloudflare implementation or authorization to redeploy on personal infrastructure.
 
 The web app remains on GitHub Pages. A separate optional, explicitly authorized relay retrieves public recordings from `audio.podigee-cdn.net` and `adswizz.podigee-cdn.net` when those servers do not permit browser CORS. It is not an arbitrary proxy, an inference endpoint, or an access-control bypass. No provider keys or user cookies are accepted or forwarded.
 
