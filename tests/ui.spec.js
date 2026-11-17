@@ -144,6 +144,24 @@ test('unofficial status and provider-side spending-cap limitation are visible',a
  await page.goto('/podlingua/');await expect(page.locator('.main-footer')).toContainText('unofficial AntennaPod');
  await page.getByRole('button',{name:'Engine settings'}).click();await expect(page.locator('#settings')).toContainText('hard spending limits');
 });
+test('a second tab can replace a transcript without a pending first-tab result overwriting it',async({page,context})=>{
+ let release,started;const gate=new Promise(r=>release=r),began=new Promise(r=>started=r);
+ await page.route('https://translation.googleapis.com/**',async route=>{started();await gate;await route.fulfill({json:{data:{translations:[{translatedText:'Stale one'},{translatedText:'Stale two'}]}}});});
+ page.on('dialog',d=>d.accept());await page.goto('/podlingua/');
+ await page.getByLabel('Import audio',{exact:true}).setInputFiles({name:'Shared.wav',mimeType:'audio/wav',buffer:wav()});
+ await expect(page.locator('#episode-title')).toHaveText('Shared');
+ await page.getByLabel('Import transcript').setInputFiles({name:'Initial.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(transcript))});
+ await expect(page.locator('#status')).toContainText('attached');await cloudSettings(page);
+ await page.getByRole('button',{name:'Translate with Google',exact:true}).click();await began;
+ const other=await context.newPage();other.on('dialog',d=>d.accept());await other.goto('/podlingua/');
+ await other.getByRole('button',{name:'Open Shared',exact:true}).click();
+ await expect(other.locator('#episode-title')).toHaveText('Shared');
+ await other.getByLabel('Import transcript').setInputFiles({name:'New.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify({language:'en',segments:[{start:0,end:2,text:'Second tab wins.'}]}))});
+ await expect(other.locator('.original').first()).toContainText('Second tab wins.');release();
+ await expect(page.locator('#status')).toContainText('changed or was deleted');
+ await page.reload();await page.getByRole('button',{name:'Open Shared',exact:true}).click();
+ await expect(page.locator('.original')).toContainText('Second tab wins.');await other.close();
+});
 
 test('replacing an attached transcript invalidates a pending translation result',async({page})=>{
   let release,started;const gate=new Promise(r=>release=r),began=new Promise(r=>started=r);

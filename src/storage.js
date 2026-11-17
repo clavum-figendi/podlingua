@@ -25,13 +25,28 @@ async function transaction(mode, action) {
 }
 export async function listEpisodes() {
   const rows = await transaction('readonly',s=>s.getAll());
-  return rows.sort((a,b)=>(b.createdAt || 0)-(a.createdAt || 0));
+  return rows.map(withRevision).sort((a,b)=>(b.createdAt || 0)-(a.createdAt || 0));
 }
-export async function getEpisode(id) { return transaction('readonly',s=>s.get(id)); }
+const withRevision=row=>row?{...row,revision:row.revision || 'legacy'}:undefined;
+export async function getEpisode(id) { return withRevision(await transaction('readonly',s=>s.get(id))); }
 export async function saveEpisode(episode) {
   if (!episode || typeof episode.id !== 'string' || !episode.id || episode.id.length>128) throw new Error('Invalid library episode identifier');
   const {id,title,audio,doc,createdAt} = episode;
-  return transaction('readwrite',s=>s.put({id,title,audio,doc,createdAt}));
+  const expectedRevision=episode.revision ?? null;
+  const db=await openDatabase();
+  return new Promise((resolve,reject)=>{
+    const tx=db.transaction('episodes','readwrite'),store=tx.objectStore('episodes');
+    let failure,saved;
+    const read=store.get(id);
+    read.onsuccess=()=>{
+      const current=withRevision(read.result);
+      if((current?.revision ?? null)!==expectedRevision){failure=new Error('Episode changed or was deleted in another tab. Result not saved.');tx.abort();return;}
+      saved={id,title,audio,doc,createdAt,revision:crypto.randomUUID()};store.put(saved);
+    };
+    tx.oncomplete=()=>resolve(saved);
+    tx.onabort=()=>reject(failure || new Error('Local library write failed. Check storage quota and permissions.'));
+    tx.onerror=()=>{};
+  });
 }
 export async function deleteEpisode(id) { return transaction('readwrite',s=>s.delete(id)); }
 export async function clearEpisodes() { return transaction('readwrite',s=>s.clear()); }

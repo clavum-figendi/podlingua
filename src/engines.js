@@ -1,3 +1,4 @@
+import {mixChannels,validateAudioDuration} from './audio-worker.js';
 // Provider adapters are independent implementations of the documented public APIs.
 const catalog = rows => rows.map(([id,name,model,endpoint,description]) => ({id,name,model,endpoint,description:description || 'User account/key required. Browser CORS support depends on the service; charges and quotas may apply.'}));
 export const asrProviders = catalog([
@@ -126,6 +127,11 @@ export async function translate(doc,config,opts={}) {
   const source=c.source && c.source!=='auto' ? c.source : doc.language || 'auto';
   if(!c.target || c.target==='auto') throw new Error('Select a target language.');
   if(!Array.isArray(doc.segments) || doc.segments.length>20000) throw new Error('Invalid or excessive segment count');
+  if(c.provider==='local' && ['auto','unknown','und',''].includes(source.toLowerCase()))throw new Error('Select an explicit source language in Engine settings before local translation. Whisper automatic detection does not expose a saved language in this integration.');
+  for(const segment of doc.segments){
+    if(typeof segment.text!=='string'||segment.text.length>4000)throw new Error('Translation segment exceeds 4000 characters. Split it first. No requests sent.');
+    if(c.provider==='mymemory' && new TextEncoder().encode(segment.text).length>500)throw new Error('MyMemory accepts segments of at most 500 UTF-8 bytes. No requests sent.');
+  }
   const operation=jobScope(c,opts.signal);
   let local;
   try {
@@ -260,27 +266,49 @@ function normalizeLanguage(value) {
 }
 export async function decodeTo16kPCM(file,signal,maxBytes) {
   signal.throwIfAborted();
-  if(file.size>maxBytes)throw new Error('Audio file exceeds input limit.');
+  if(file.size>Math.min(maxBytes,256*1024*1024))throw new Error('Audio file exceeds input limit (256 MB browser decode cap).');
+  if(typeof Audio!=='undefined')await audioDuration(file,signal);
   const Context=globalThis.AudioContext || globalThis.webkitAudioContext;
   if(!Context)throw new Error('This browser does not support Web Audio decoding.');
   const context=new Context({sampleRate:16000});
   try {
     const bytes=await file.arrayBuffer();signal.throwIfAborted();
-    const decoded=await context.decodeAudioData(bytes);signal.throwIfAborted();
+    let decoded=await context.decodeAudioData(bytes);signal.throwIfAborted();
     if(decoded.length*decoded.numberOfChannels>64*1024*1024 || decoded.length/decoded.sampleRate>3600)throw new Error('Audio is too large for browser decoding (one hour / 256 MB decoded limit). Shorten it or use a hosted diarization provider that accepts the original file.');
-    const n=Math.floor(decoded.length*16000/decoded.sampleRate);
-    if(!n)throw new Error('No audio samples were decoded.');
-    const mono=new Float32Array(n);
-    const ratio=decoded.sampleRate/16000;
-    for(let ch=0;ch<decoded.numberOfChannels;ch++){
-      const input=decoded.getChannelData(ch);
-      for(let i=0;i<n;i++){
-        const position=i*ratio,a=Math.floor(position),b=Math.min(a+1,input.length-1),fraction=position-a;
-        mono[i]+=(input[a]*(1-fraction)+input[b]*fraction)/decoded.numberOfChannels;
-      }
-    }
+    const sampleRate=decoded.sampleRate,channels=[];
+    for(let ch=0;ch<decoded.numberOfChannels;ch++)channels.push(decoded.getChannelData(ch).slice());
+    decoded=null;
+    const mono=typeof Worker==='undefined'?mixChannels(channels,sampleRate):await prepareAudio(channels,sampleRate,signal);
     signal.throwIfAborted();return mono;
   } finally {await context.close();}
+}
+function audioDuration(file,signal){
+  return new Promise((resolve,reject)=>{
+    const audio=new Audio(),url=URL.createObjectURL(file);
+    const finish=error=>{clearTimeout(timer);signal.removeEventListener('abort',abort);audio.onloadedmetadata=null;audio.onerror=null;audio.removeAttribute('src');audio.load();URL.revokeObjectURL(url);error?reject(error):resolve();};
+    const abort=()=>finish(signal.reason);
+    const timer=setTimeout(()=>finish(new Error('Could not determine audio duration before decoding. Try a different supported audio format.')),15000);
+    audio.onloadedmetadata=()=>{try{validateAudioDuration(audio.duration);finish();}catch(error){finish(error);}};
+    audio.onerror=()=>finish(new Error('This browser cannot read audio metadata for this file.'));
+    signal.addEventListener('abort',abort,{once:true});audio.preload='metadata';audio.src=url;
+  });
+}
+function prepareAudio(channels,sampleRate,signal){
+  signal.throwIfAborted();
+  const worker=new Worker(new URL('./audio-worker.js',import.meta.url),{type:'module'});
+  return new Promise((resolve,reject)=>{
+    const finish=(error,pcm)=>{signal.removeEventListener('abort',abort);worker.terminate();error?reject(error):resolve(pcm);};
+    const abort=()=>finish(signal.reason);
+    signal.addEventListener('abort',abort,{once:true});
+    worker.onmessage=({data})=>finish(data.error?new Error(data.error):null,data.pcm);
+    worker.onerror=()=>finish(new Error('Audio preparation worker failed. Try a smaller file.'));
+    worker.postMessage({channels,sampleRate},channels.map(ch=>ch.buffer));
+  });
+}
+export function workerPayload(job){
+  if(job.task!=='asr')return {job,transfer:[]};
+  const pcm=job.pcm.slice();
+  return {job:{...job,pcm},transfer:[pcm.buffer]};
 }
 function localRunner(signal,onProgress=()=>{}) {
   signal.throwIfAborted();
@@ -298,7 +326,7 @@ function localRunner(signal,onProgress=()=>{}) {
   };
   worker.onerror=()=>rejectPending(new Error('Local model worker failed. Check available memory, model downloads and browser support.'));
   return {
-    run(job){signal.throwIfAborted();if(pending)throw new Error('Local inference is already running.');return new Promise((resolve,reject)=>{pending={id:++serial,resolve,reject};worker.postMessage({id:serial,job});});},
+    run(job){signal.throwIfAborted();if(pending)throw new Error('Local inference is already running.');return new Promise((resolve,reject)=>{pending={id:++serial,resolve,reject};const payload=workerPayload(job);worker.postMessage({id:serial,job:payload.job},payload.transfer);});},
     close(){signal.removeEventListener('abort',abort);worker.terminate();rejectPending(new DOMException('Local worker closed','AbortError'));},
   };
 }
