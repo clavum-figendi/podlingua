@@ -1,5 +1,13 @@
 # Verification record
 
+## Build dependency security mitigation (2026-11-18)
+
+- GHSA-fc5q-39xc-vjpf affects picomatch 4.0.7 and every published earlier version. No fixed npm release was available. npm's suggested Vite 6.2.7 downgrade introduces other known Vite vulnerabilities and was rejected.
+- Retained Vite 8.3.8; all picomatch consumers use a local MIT-licensed 4.0.7 distribution with a conservative repeated-wildcard-extglob guard. See `vendor/picomatch/SECURITY-PATCH.md` for exact provenance, intentional matching trade-offs and upstream replacement steps.
+- The attack regression timed out against unmodified picomatch, then passed with the guard. Application unit tests, production build and all seven mocked-network Chromium journeys passed with the patched dependency.
+- `npm ci` and `npm audit` report zero registry vulnerabilities. npm audit does not inspect the local dependency; the attack regression and consumer-resolution checks separately verify the local mitigation. This is not a general security certification.
+- Regenerated dependency notices/inventories and the `docs/` Pages build. Real on-device inference was not rerun for this build-tool-only change.
+
 ## Interface rebuild (2026-11-18)
 
 The UI layer was rewritten (tabs, sheets, read-along player, Settings with Advanced). Domain modules and their unit tests are unchanged apart from removing the DOM half of `episode-sharing.js` and the old `offline.js` UI.

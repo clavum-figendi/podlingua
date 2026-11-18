@@ -23,6 +23,10 @@
   "devDependencies": {
     "@playwright/test": "1.65.1",
     "fake-indexeddb": "6.2.8",
+    "picomatch": "file:vendor/picomatch",
     "vite": "8.3.8"
+  },
+  "overrides": {
+    "picomatch": "$picomatch"
   }
 }

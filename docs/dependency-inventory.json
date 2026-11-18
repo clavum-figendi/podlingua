@@ -1,15 +1,5 @@
 [
   {
-    "name": "@emnapi/runtime",
-    "version": "1.11.3",
-    "license": "MIT",
-    "dev": false,
-    "repository": {
-      "type": "git",
-      "url": "git+https://github.com/toyobayashi/emnapi.git"
-    }
-  },
-  {
     "name": "@fontsource-variable/atkinson-hyperlegible-next",
     "version": "5.3.0",
     "license": "OFL-1.1",
@@ -80,6 +70,17 @@
     }
   },
   {
+    "name": "@img/sharp-libvips-linuxmusl-x64",
+    "version": "1.3.4",
+    "license": "LGPL-3.0-or-later",
+    "dev": false,
+    "repository": {
+      "type": "git",
+      "url": "git+https://github.com/lovell/sharp-libvips.git",
+      "directory": "npm/linuxmusl-x64"
+    }
+  },
+  {
     "name": "@img/sharp-linux-x64",
     "version": "0.35.5",
     "license": "Apache-2.0",
@@ -91,14 +92,14 @@
     }
   },
   {
-    "name": "@img/sharp-wasm32",
+    "name": "@img/sharp-linuxmusl-x64",
     "version": "0.35.5",
-    "license": "Apache-2.0 AND LGPL-3.0-or-later AND MIT",
+    "license": "Apache-2.0",
     "dev": false,
     "repository": {
       "type": "git",
       "url": "git+https://github.com/lovell/sharp.git",
-      "directory": "npm/wasm32"
+      "directory": "npm/linuxmusl-x64"
     }
   },
   {
@@ -333,16 +334,6 @@
     }
   },
   {
-    "name": "fdir",
-    "version": "6.5.0",
-    "license": "MIT",
-    "dev": true,
-    "repository": {
-      "type": "git",
-      "url": "git+https://github.com/thecodrr/fdir.git"
-    }
-  },
-  {
     "name": "fflate",
     "version": "0.8.3",
     "license": "MIT",
@@ -522,9 +513,9 @@
   },
   {
     "name": "picomatch",
-    "version": "4.0.7",
+    "version": "4.0.7-podlingua.1",
     "license": "MIT",
-    "dev": true,
+    "dev": false,
     "repository": "micromatch/picomatch"
   },
   {
@@ -624,13 +615,13 @@
     }
   },
   {
-    "name": "tslib",
-    "version": "2.9.1",
-    "license": "0BSD",
-    "dev": false,
+    "name": "fdir",
+    "version": "6.5.0",
+    "license": "MIT",
+    "dev": true,
     "repository": {
       "type": "git",
-      "url": "https://github.com/Microsoft/tslib.git"
+      "url": "git+https://github.com/thecodrr/fdir.git"
     }
   },
   {
