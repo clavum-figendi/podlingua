@@ -1,0 +1,76 @@
+import {test, expect} from '@playwright/test';
+import {mockNetwork, FEED} from './fixtures.js';
+
+test('manual Resume after a rate limit keeps completed batches and never repeats them', async ({page}) => {
+  await mockNetwork(page.context());
+  const texts = Array.from({length: 10}, (_, i) => 'Source line ' + i), calls = [];
+  await page.route('https://media.example.org/transcript-0.json', route => route.fulfill({headers: {'Access-Control-Allow-Origin': '*'}, json: {language: 'fr', segments: texts.map((text, i) => ({start: i, end: i + 1, text}))}}));
+  await page.route('https://api.groq.com/openai/v1/chat/completions', route => {
+    const batch = JSON.parse(route.request().postDataJSON().messages.at(-1).content); calls.push(batch);
+    expect(route.request().headers().authorization).toBe(`Bearer ${calls.length > 2 ? 'fixture-corrected-key' : 'fixture-resume-key'}`);
+    if(calls.length > 2) expect(route.request().postDataJSON().max_completion_tokens).toBe(1024);
+    if(calls.length === 2) return route.fulfill({status: 429, headers: {'Access-Control-Allow-Origin': '*', 'Access-Control-Expose-Headers': 'Retry-After', 'Retry-After': '1'}, json: {error: {code: 'rate_limit_exceeded'}}});
+    return route.fulfill({headers: {'Access-Control-Allow-Origin': '*'}, json: {choices: [{message: {content: JSON.stringify(batch.map(t => '[en] ' + t))}}]}});
+  });
+  await page.clock.install();
+  await page.goto('/podlingua/#/discover');
+  await page.fill('#discover-q', FEED); await page.keyboard.press('Enter');
+  await page.locator('.ep-main').first().click();
+  await page.locator('#sheet [data-act="process"][data-kind="asr"]').click();
+  await page.locator('#sheet').getByLabel('Translate into').selectOption('en');
+  await page.locator('[data-change="flow-engine"][data-kind="translation"][value="online"]').check({force: true});
+  await page.locator('[data-change="flow-provider"]').selectOption('groq');
+  await page.locator('[data-input="flow-key"][data-kind="translation"]').fill('fixture-resume-key');
+  await page.getByLabel('Translation model ID').fill('account-chat');
+  await page.getByLabel('Translation model ID').dispatchEvent('change');
+  await page.locator('[data-act="flow-start"]').click();
+  await expect(page.locator('#sheet')).toContainText('HTTP 429');
+  await expect(page.locator('#sheet').getByRole('button', {name: 'Resume', exact: true})).toBeVisible();
+  await page.locator('#sheet [data-act="sheet-close"]').click();
+  await page.goto('/podlingua/#/settings');
+  await page.locator('.advanced > summary').click();
+  await page.locator('.group > summary', {hasText: 'Translation', exact: true}).click();
+  await page.locator('[data-input="set-key"][data-kind="translation"]').fill('fixture-corrected-key');
+  await page.getByLabel('Maximum translation output tokens').fill('1024');
+  await page.getByLabel('Maximum translation output tokens').dispatchEvent('change');
+  await page.locator('[data-act="activity"]').click();
+  await expect(page.locator('#sheet')).toContainText('8 translated lines kept');
+  expect(calls.length).toBe(2);
+  await page.clock.runFor(2500);
+  await page.getByRole('button', {name: 'Resume'}).click();
+  await expect(page.locator('.job-done')).toHaveCount(2);
+  expect(calls.length).toBe(3);
+  expect(calls[0]).toEqual(texts.slice(0, 8));
+  expect(calls[2]).toEqual(texts.slice(8));
+});
+
+test('cancelled translation exposes Resume and does not resend its completed batch', async ({page}) => {
+  await mockNetwork(page.context());
+  const texts = Array.from({length: 10}, (_, i) => 'Cancel source ' + i), calls = [];
+  await page.route('https://media.example.org/transcript-0.json', route => route.fulfill({headers: {'Access-Control-Allow-Origin': '*'}, json: {language: 'fr', segments: texts.map((text, i) => ({start: i, end: i + 1, text}))}}));
+  await page.route('https://api.groq.com/openai/v1/chat/completions', route => {
+    const batch = JSON.parse(route.request().postDataJSON().messages.at(-1).content); calls.push(batch);
+    return route.fulfill({headers: {'Access-Control-Allow-Origin': '*'}, json: {choices: [{message: {content: JSON.stringify(batch.map(t => '[en] ' + t))}}]}});
+  });
+  await page.clock.install();
+  await page.goto('/podlingua/#/discover');
+  await page.fill('#discover-q', FEED); await page.keyboard.press('Enter');
+  await page.locator('.ep-main').first().click();
+  await page.locator('#sheet [data-act="process"][data-kind="asr"]').click();
+  await page.locator('#sheet').getByLabel('Translate into').selectOption('en');
+  await page.locator('[data-change="flow-engine"][data-kind="translation"][value="online"]').check({force: true});
+  await page.locator('[data-change="flow-provider"]').selectOption('groq');
+  await page.locator('[data-input="flow-key"][data-kind="translation"]').fill('fixture-cancel-key');
+  await page.getByLabel('Translation model ID').fill('account-chat');
+  await page.getByLabel('Translation model ID').dispatchEvent('change');
+  await page.locator('[data-act="flow-start"]').click();
+  await expect(page.locator('#sheet')).toContainText('Waiting for provider pacing');
+  await page.locator('#sheet [data-act="job-cancel"]').click();
+  await expect(page.locator('#sheet')).toContainText('Cancelled');
+  await expect(page.locator('#sheet').getByRole('button', {name: 'Resume', exact: true})).toBeVisible();
+  expect(calls).toHaveLength(1);
+  await page.clock.runFor(2500);
+  await page.locator('#sheet').getByRole('button', {name: 'Resume', exact: true}).click();
+  await expect(page.locator('#sheet .step-done')).toHaveCount(2);
+  expect(calls).toEqual([texts.slice(0, 8), texts.slice(8)]);
+});

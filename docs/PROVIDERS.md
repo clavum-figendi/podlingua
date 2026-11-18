@@ -1,6 +1,6 @@
 # Podlingua provider guide
 
-Public documentation verified **2026-11-17**. This is a dated research snapshot, not a promise of account eligibility, production capacity, current model availability, or browser connectivity. No paid requests, account creation, entitlement checks, or secret-bearing API calls were made.
+Public documentation rechecked **2026-11-18**. This is a dated research snapshot, not a promise of account eligibility, production capacity, current model availability, or browser connectivity. No paid inference, account creation or real credentialed entitlement checks were made. Anonymous model GET/OPTIONS probes are not authenticated inference verification.
 
 `src/provider-info.js` is display-only metadata. It does not change the engines or enable new adapters. The unique key is **kind + id**, not id alone. `providerInfo` (alias `providerCatalog`) covers the adapters in `src/engines.js`; `localModels` (alias `modelCatalog`) covers the worker allowlist; `providerExtras` contains explicitly **not-integrated** service capabilities. `getProviderInfo(kind, id)` returns the matching integrated record or undefined.
 
@@ -33,7 +33,7 @@ The extra OpenAI candidate uses `gpt-4o-transcribe-diarize` and `diarized_json`,
 
 | Adapter ID | Account/key and offer boundary |
 | --- | --- |
-| `deepl` | API Free and paid plans exist; API account/key required. **Official docs reject direct browser calls (403/CORS)**: the integrated adapter needs a trusted compatible backend/proxy before it can work in this browser app.[4][5] |
+| `deepl` | API Free and paid plans exist; API account/key required. Direct browser requests are blocked; the integrated restricted Podlingua Worker forwards text and your key only with explicit relay consent.[4][5] |
 | `google` | NMT text: first 500,000 characters/month covered by credit up to $10, shared across Basic/Advanced; does not roll over or apply to every product/model. Excess usage is paid.[6] |
 | `microsoft` | Azure F0 resource/key: 2 million characters/month shared across standard translation and custom training. Paid S1 is a different tier.[7] |
 | `libretranslate` | User instance may be keyless; official managed host is paid/keyed. Instance-dependent limits.[3] |
@@ -44,11 +44,35 @@ The extra OpenAI candidate uses `gpt-4o-transcribe-diarize` and `diarized_json`,
 | `openrouter` | API key required. Free variants/router and paid models are separate; saved `openai/gpt-4o-mini` is not a verified free route. Retrieved quota numbers did not render, so no fixed count is asserted.[22][23] |
 | `fireworks` | Pay-per-token serverless API. Introductory credits/recurring free allowance were not verified from the official introduction; any account promotion remains conditional.[24] |
 | `mistral` | Official docs advertise Studio Free mode and generating an API key. Exact model eligibility/quotas were not established. Legacy Experiment-tier docs returned 404; old quota claims are not reused.[25] |
-| `gemini` | `gemini-2.5-flash` pricing lists free input/output and a separate paid tier. Model/account/region limits apply. Free-tier data may be used to improve products; paid tier is marked No. Grounding-tool RPD is not a general translation quota.[26] |
+| `gemini` | Free eligibility is model/project/region dependent. The deprecated `gemini-2.5-flash` default is cleared once; select a current model explicitly. Free-tier data-use terms differ from paid. Grounding-tool RPD is not a general translation quota.[26] |
 | `anthropic` | API key and metered tokens. Pricing FAQ says new users get a small, unquantified amount of test credits; not a recurring free tier.[27] |
 | `ollama` / `custom` | Your server, model, hardware and configuration determine cost/privacy. Local Ollama needs no key by default; cloud routes do.[28][29][30] |
 
-Chat-model routes translate by instruction and require a valid JSON array response; they are not dedicated translation-engine guarantees. Model strings in `engines.js` are existing configuration defaults, not proof of today's model availability. No live model catalog or account access was tested.
+Chat-model routes normally translate by instruction and require a valid JSON array response; they are not dedicated translation-quality guarantees. NVIDIA Riva uses its native plain-text translation protocol instead. Model strings and public catalogs are not proof of account entitlement.
+
+## Model selection, 400/404 recovery and rate limits
+
+In **Settings → Advanced → Translation**, enter your session-only API key, click **Load available models**, consent to the catalog GET, then choose a supported chat/text model. No transcript is sent by discovery and no model is automatically chosen. Manual exact IDs remain available when discovery is blocked by CORS. Discovery follows bounded native pagination for Gemini, Together and Fireworks; other compatible catalogs may return a partial list. Listing does not establish price or free entitlement.
+
+- **Groq:** the former `llama-3.3-70b-versatile` default is restricted/retired for ordinary free/developer access. Select a current authorized model; requests now use `max_completion_tokens`. [Deprecations](https://console.groq.com/docs/deprecations).
+- **Fireworks:** the former Llama 3.3 serverless default was removed. Discovery uses `/v1/accounts/fireworks/models?filter=supports_serverless%3Dtrue`, not a guessed inference `/models` endpoint. Dedicated-only models are excluded. [Native catalog](https://docs.fireworks.ai/api-reference/list-models).
+- **Together:** uses `https://api.together.ai/v1/chat/completions` and `/v2/supported-models?product=PRODUCT_SERVERLESS&modality=MODALITY_TEXT`; choices use the documented inference `name`, not an internal UUID. The former `.xyz` translation preset migrates once; keys are never silently carried to a different endpoint. [Official OpenAPI](https://docs.together.ai/openapi.yaml).
+- **Gemini:** discovery keeps only `generateContent` models; requests use native JSON-array structured output and configurable output budget. `2.5 Flash` is deprecated; Google documents automatic alias migration with changed pricing, so reselect explicitly rather than assuming an old alias remains free. [Retirements](https://ai.google.dev/gemini-api/docs/deprecations).
+- **All hosted translations/lookups:** requests serialize by endpoint origin, with configurable spacing and shared cooldowns across tabs where Web Locks/storage work. DeepL always waits at least 1,250 ms between requests; Mistral defaults to 2,500 ms. A 429 stops inference without resending; `Retry-After` becomes a cooldown. Pacing cannot replenish an exhausted account allowance or guarantee that a remote job stops on cancellation.
+- **Resume:** completed translations stay in tab memory after a later failure. Click **Resume** in the episode sheet or Activity after fixing the key/quota issue; completed batches are not resent. Resume retains the originally approved provider, endpoint, model and languages, uses a corrected key only for that exact scope, and permits same-model budget tuning. For different model/endpoint/languages, start a new translation instead. Reloading discards the checkpoint. Saved source transcripts remain intact until a complete translation commits.
+- **400/404 diagnostics:** bounded provider JSON is classified into safe model, authentication, context/budget, region/billing or quota guidance. Raw provider messages are not shown because they can echo keys or text. Output-token and batch-character controls are app budgets, not billing caps. Keys stay in memory and are scoped to the exact provider/endpoint.
+
+### Additional selectable adapters
+
+| Provider | Account boundary and browser status |
+| --- | --- |
+| NVIDIA NIM | BYO account/key. No universal free production allowance is promised. Anonymous GET/OPTIONS lacked allow-origin, so discovery/translation require an explicitly configured trusted compatible HTTPS backend. `nvidia/riva-translate-4b-instruct-v2` uses the documented language-pair prompt, explicit supported source/target (regional Spanish/Portuguese/Chinese tags), and one segment/request. [Native model card](https://build.nvidia.com/nvidia/riva-translate-4b-instruct-v2). |
+| Cerebras | Current trial: $5 after a verified payment method, expires after 30 days. Not an unconditional recurring free tier. Leave auto-recharge off and set provider-side limits. No model selected automatically. [Billing](https://inference-docs.cerebras.ai/console/account-billing.md). |
+| SambaNova | Free Tier without a linked payment method, with small model-specific minute/day/token quotas; adding payment changes tier. Anonymous GET/OPTIONS lacked allow-origin, so use your explicitly configured trusted compatible backend. [Limits](https://docs.sambanova.ai/docs/en/models/rate-limits.md). |
+| DeepSeek | Paid developer API, not the free consumer chatbot. Only use explicitly authorized existing balance; thinking is disabled for translation. [Models/pricing](https://api-docs.deepseek.com/quick_start/pricing). |
+| Hugging Face router | Ordinary free accounts have **no monthly inference credits**; current PRO credit is $2/month across HF compute, other plans vary. Catalog choices pin `model:provider` (for example `CohereLabs/command-a-translate-08-2025:cohere`, **not free**). Automatic provider failover is disabled. [Pricing](https://huggingface.co/docs/inference-providers/pricing), [routing](https://huggingface.co/docs/inference-providers/routing). |
+
+These adapters have request/response fixture tests, not real credentialed inference or translation-quality verification. No shared key, purchase, top-up, automatic inference retry or app-selected provider/model fallback is supplied. OpenRouter explicitly sends `allow_fallbacks:false`; provider-operated model aliases can still change upstream. NVIDIA/SambaNova are backend-required options, not working direct-browser promises. The dedicated DeepL Worker is deliberately **not** a general proxy for them; no personal infrastructure is connected.
 
 ## Downloadable models already allowed by Podlingua
 

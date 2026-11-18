@@ -21,7 +21,7 @@ test('mocked hosted Whisper uploads bounded WAV chunks with exact offsets and se
 test('translation builders use real native schemas and header authentication',()=>{
   const cases={deepl:['text','translations'],google:['q','data'],microsoft:[null,null],libretranslate:['q',null],gemini:['contents',null],anthropic:['messages',null],openai:['messages',null]};
   for(const [id,[field]] of Object.entries(cases)) {
-    const r=e.buildTranslationRequest({...cfg(id),allowTranslationRelay:id==='deepl'},['Hello']);
+    const r=e.buildTranslationRequest({...cfg(id),...(id==='gemini'?{model:'fixture-gemini-model'}:{}),allowTranslationRelay:id==='deepl'},['Hello']);
     assert.equal(r.method,'POST');
     if(field) assert.ok(JSON.parse(r.body)[field]);
     assert.ok(!r.url.includes('test-secret'));

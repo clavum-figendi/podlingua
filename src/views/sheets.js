@@ -10,6 +10,7 @@ import {player, media, load, removeBookmark} from '../services/player.js';
 import {episodeShare} from '../episode-sharing.js';
 import {fetchRelayAudio, supportsAudioRelay, AUDIO_RELAY_ENDPOINT} from '../audio-relay-client.js';
 import {needsDeepLRelay} from '../engines.js';
+import {providerModelControls, modelReady} from './provider-controls.js';
 
 const close = html`<button type="button" class="icon-btn sheet-close" data-act="sheet-close" aria-label="Close">${icon('close')}</button>`;
 const languageOptions = (value, withAuto) => html`${withAuto ? html`<option value="auto" ${value === 'auto' ? 'selected' : ''}>Detect</option>` : ''}${[...new Set([...LANGUAGES, value].filter(v => v && v !== 'auto'))].map(code => html`<option value="${code}" ${code === value ? 'selected' : ''}>${languageName(code)}</option>`)}`;
@@ -26,7 +27,7 @@ function step(e, kind) {
     <span class="step-icon">${working ? ring(job.status === 'running' ? job.progress : 0) : icon(done ? 'check' : kind === 'asr' ? 'transcript' : 'translate')}</span>
     <span class="step-text"><strong>${label}</strong><small>${working ? `${jobLabel(job)}${job.message ? ' · ' + job.message : ''}` : done ? (kind === 'asr' ? `${e.doc.segments.length} lines · ${languageName(e.doc.language)}` : languageName(e.doc.targetLanguage)) : failed && (kind === 'asr') === (failed.kind !== 'translate') ? failed.error : kind === 'translate' && !e.doc ? 'Needs a transcript' : 'Not yet'}</small></span>
     ${working ? html`<button type="button" class="btn small ghost" data-act="job-cancel" data-id="${e.id}">Cancel</button>`
-      : html`<button type="button" class="btn small ${done ? 'ghost' : ''}" data-act="process" data-id="${e.id}" data-kind="${kind}" ${kind === 'translate' && !e.doc ? 'disabled' : ''}>${done ? 'Redo' : kind === 'asr' ? 'Create' : 'Translate'}</button>`}
+      : html`${kind === 'translate' && failed?.kind === 'translate' && failed.resume?.translations?.length ? html`<button type="button" class="btn small" data-act="job-retry" data-id="${failed.id}" title="Resume with original provider, model and languages">Resume</button>` : ''}<button type="button" class="btn small ${done ? 'ghost' : ''}" data-act="process" data-id="${e.id}" data-kind="${kind}" ${kind === 'translate' && !e.doc ? 'disabled' : ''}>${done ? 'Redo' : kind === 'asr' ? 'Create' : 'Translate'}</button>`}
   </div>`;
 }
 function renderEpisode() {
@@ -113,7 +114,7 @@ function engineChoice(kind) {
   ${local ? '' : html`<div class="inline-fields">
     <select data-change="flow-provider" data-kind="${kind}" aria-label="Online service">${hosted.map(x => html`<option value="${x.id}" ${x.id === p.id ? 'selected' : ''}>${x.name}</option>`)}</select>
     <input type="password" autocomplete="off" placeholder="API key (kept until reload)" value="${getKey(kind)}" data-input="flow-key" data-kind="${kind}" aria-label="${p.name} API key">
-  </div>${keyMissing ? html`<p class="hint">${icon('key')}Add a key, or open Settings › Advanced for endpoints.</p>` : ''}`}`;
+  </div>${keyMissing ? html`<p class="hint">${icon('key')}Add a key, or open Settings › Advanced for endpoints.</p>` : ''}${kind === 'translation' ? providerModelControls(kind) : ''}`}`;
 }
 function renderProcess() {
   const e = store.byId.get(flow.id);
@@ -124,7 +125,7 @@ function renderProcess() {
   const doTranslate = flow.kind === 'translate' || flow.translate;
   const relayRequired = doTranslate && providerOf('translation').id === 'deepl' && needsDeepLRelay(prefs.translation.endpoint);
   const sourceMissing = doTranslate && trLocal && flow.source === 'auto' && !(flow.kind === 'translate' && e.doc?.language && !['auto', 'unknown', 'und'].includes(e.doc.language));
-  const blocked = (needsAudio && !e.audioUrl) || sourceMissing || (flow.kind === 'translate' && !e.doc) || (relayRequired && !flow.relayConsent);
+  const blocked = (needsAudio && !e.audioUrl) || sourceMissing || (flow.kind === 'translate' && !e.doc) || (relayRequired && !flow.relayConsent) || (doTranslate && !modelReady('translation'));
   const steps = [
     ...(needsAudio ? [['download', 'Get audio']] : []),
     ...(flow.kind === 'asr' ? [[flow.publisher ? 'transcript' : 'wave', flow.publisher ? 'Publisher transcript' : 'Transcribe']] : []),
@@ -163,6 +164,7 @@ function processSteps(e) {
   const steps = [], doTranslate = flow.kind === 'translate' || flow.translate;
   const relayRequired = doTranslate && providerOf('translation').id === 'deepl' && needsDeepLRelay(prefs.translation.endpoint);
   if(relayRequired && !flow.relayConsent)throw new Error('Confirm permission for the DeepL Cloudflare relay first.');
+  if(doTranslate && !modelReady('translation'))throw new Error('Select a supported translation model first.');
   const source = flow.source;
   savePrefs({source: flow.source === 'auto' ? prefs.source : flow.source, target: flow.target});
   const cloud = kind => providerOf(kind).id !== 'local';
@@ -232,8 +234,8 @@ function renderActivity() {
   return html`${close}<h2 class="sheet-title">${icon('wave')}Activity</h2>
     ${jobs.length ? html`<ul class="list jobs">${[...jobs].reverse().map(j => html`<li class="job-${j.status}">
       ${j.status === 'running' || j.status === 'queued' ? ring(j.status === 'running' ? j.progress : 0) : icon(statusIcon[j.status])}
-      <span class="grow"><strong>${jobLabel(j)}</strong><small>${j.title}${j.status === 'running' && j.message ? ' · ' + j.message : ''}${j.error ? ' · ' + j.error : ''}${j.status === 'queued' ? ' · Waiting' : ''}</small></span>
-      ${j.status === 'error' ? iconBtn('refresh', 'Retry', 'job-retry', {id: j.id}) : ''}
+      <span class="grow"><strong>${jobLabel(j)}</strong><small>${j.title}${j.status === 'running' && j.message ? ' · ' + j.message : ''}${j.error ? ' · ' + j.error : ''}${j.status === 'queued' ? ' · Waiting' : ''}${j.status !== 'done' && j.resume?.translations?.length ? ` · ${j.resume.translations.length} translated lines kept in this tab` : ''}</small></span>
+      ${j.status === 'error' || (j.status === 'cancelled' && j.kind === 'translate' && j.resume?.translations?.length) ? iconBtn('refresh', j.resume?.translations?.length ? 'Resume' : 'Retry', 'job-retry', {id: j.id}) : ''}
       ${j.status === 'error' && j.code === 'MEDIA_NETWORK_BLOCKED' ? iconBtn('upload', 'Get audio', 'job-help', {id: j.episodeId}) : ''}
       ${j.status === 'running' || j.status === 'queued' ? iconBtn('close', 'Cancel', 'job-cancel', {id: j.episodeId}) : iconBtn('close', 'Dismiss', 'job-dismiss', {id: j.id})}
     </li>`)}</ul>` : html`<p class="muted">Nothing running.</p>`}`;

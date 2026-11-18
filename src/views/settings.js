@@ -12,6 +12,7 @@ import {prepareLocalModel} from '../engines.js';
 import {providerInfo, getProviderInfo, PROVIDERS_VERIFIED_AT} from '../provider-info.js';
 import {QUEUE_SORTS, ENQUEUE_POSITIONS, saveQueuePreferences} from '../parity.js';
 import {languageSelect} from './sheets.js';
+import {providerModelControls} from './provider-controls.js';
 
 /** Podcast Index credentials live only in this page's memory. */
 export const indexKeys = {apiKey: '', apiSecret: ''};
@@ -41,7 +42,7 @@ function engine(kind) {
   return html`
     ${field('Service', html`<select data-change="set-provider" data-kind="${kind}">${providers(kind).map(x => html`<option value="${x.id}" ${x.id === p.id ? 'selected' : ''}>${x.name}</option>`)}</select>`, info?.offer)}
     ${local ? field('Model', html`<select data-change="set-engine" data-kind="${kind}" data-key="model">${kind === 'translation' ? html`<option value="${AUTO_MODEL}" ${prefs[kind].model === AUTO_MODEL ? 'selected' : ''}>Best for the language pair</option>` : ''}${models.map(m => html`<option value="${m.id}" ${prefs[kind].model === m.id ? 'selected' : ''}>${m.name} · ${m.note}</option>`)}</select>`)
-      : html`${field('Model', html`<input value="${prefs[kind].model}" data-change="set-engine" data-kind="${kind}" data-key="model" spellcheck="false">`)}
+      : html`${kind === 'translation' ? providerModelControls(kind, {limits: true}) : field('Model', html`<input value="${prefs[kind].model}" data-change="set-engine" data-kind="${kind}" data-key="model" spellcheck="false">`)}
         ${field('Endpoint', html`<input type="url" value="${prefs[kind].endpoint}" data-change="set-engine" data-kind="${kind}" data-key="endpoint" spellcheck="false">`)}
         ${field('API key', html`<input type="password" autocomplete="off" value="${getKey(kind)}" data-input="set-key" data-kind="${kind}">`, 'Kept in memory until you reload. Never saved or exported.')}
         ${p.id === 'microsoft' ? field('Region', html`<input value="${prefs[kind].region}" data-change="set-engine" data-kind="${kind}" data-key="region">`) : ''}`}
@@ -64,7 +65,7 @@ function modelList() {
 
 function guide() {
   const filters = {all: () => true, free: p => ['free-tier', 'trial-credit', 'keyless-free', 'local-free'].includes(p.offerType), keyless: p => p.keyRequired === false, speakers: p => p.diarization};
-  return html`<div class="chips">${[['all', 'All'], ['free', 'Free tier'], ['keyless', 'No key'], ['speakers', 'Speakers']].map(([id, label]) => html`<button type="button" class="chip ${ui.guide === id ? 'on' : ''}" data-act="guide-filter" data-id="${id}">${label}</button>`)}</div>
+  return html`<div class="chips">${[['all', 'All'], ['free', 'Free / trial'], ['keyless', 'No key'], ['speakers', 'Speakers']].map(([id, label]) => html`<button type="button" class="chip ${ui.guide === id ? 'on' : ''}" data-act="guide-filter" data-id="${id}">${label}</button>`)}</div>
     <div class="guide">${providerInfo.filter(filters[ui.guide]).map(p => html`<article class="guide-card">
       <header>${icon(p.hosting === 'browser-offline' ? 'device' : 'cloud')}<strong>${p.name}</strong><span class="chip static">${p.kind === 'asr' ? 'Speech' : 'Text'}</span></header>
       <p class="small">${p.offer}</p>

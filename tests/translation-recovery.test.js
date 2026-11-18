@@ -49,7 +49,7 @@ test('DeepL batches respect serialized UTF-8 byte limits as well as segment coun
   };
   try {
     const segments = Array.from({length: 8}, (_, i) => ({start: i, end: i + 1, text: '\u0001'.repeat(4000)}));
-    const out = await translate({language: 'en', segments}, {...config, allowTranslationRelay: true});
+    const out = await translate({language: 'en', segments}, {...config, batchCharacters: 32000, allowTranslationRelay: true});
     assert.equal(sent.length, 8);
     assert.deepEqual(out.segments.map(s => s.translation), ['0', '1', '2', '3', '4', '5', '6', '7']);
   } finally { globalThis.fetch = original; }

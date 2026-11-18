@@ -17,7 +17,9 @@ export function patch(element, markup) {
     childrenOnly: true,
     getNodeKey: node => node.id || node.dataset?.key,
     onBeforeElUpdated(from, to) {
-      if (from.isEqualNode(to)) return false;
+      // Dirty form values are DOM properties, not attributes: equal markup
+      // must still reconcile an unfocused control (notably endpoint-scoped keys).
+      if (from.isEqualNode(to) && !from.matches('input,textarea,select') && !from.querySelector('input,textarea,select')) return false;
       // Large, expensive subtrees (transcripts) opt out when their signature is unchanged.
       if (from.dataset.sig && from.dataset.sig === to.dataset.sig) return false;
       if (from === document.activeElement && from.matches('input,textarea,select')) return false;

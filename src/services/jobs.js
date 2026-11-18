@@ -3,6 +3,7 @@ import {normalizeDocument} from '../core.js';
 import {getEpisode, saveEpisode} from '../storage.js';
 import {download, publisherTranscript} from './library.js';
 import {put} from './store.js';
+import {prefs, getKey} from './prefs.js';
 
 /** Sequential background work: download → transcript → translation, one step at a time. */
 export const jobs = [];
@@ -15,13 +16,13 @@ export const setBlockedHandler = fn => { blockedHandler = fn; };
 const LABELS = {download: 'Getting audio', publisher: 'Fetching transcript', asr: 'Transcribing', translate: 'Translating'};
 export const jobLabel = job => LABELS[job.kind];
 export const activeJob = episodeId => jobs.find(j => j.episodeId === episodeId && (j.status === 'running' || j.status === 'queued'));
-export const failedJob = episodeId => jobs.findLast(j => j.episodeId === episodeId && j.status === 'error');
+export const failedJob = episodeId => jobs.findLast(j => j.episodeId === episodeId && (j.status === 'error' || (j.status === 'cancelled' && j.kind === 'translate' && j.resume?.translations?.length)));
 export const busy = () => jobs.some(j => j.status === 'running' || j.status === 'queued');
 
 /** steps: [{kind, config}] executed in order; a failure cancels the rest of the chain. */
 export function enqueue(episodeId, title, steps) {
   const chain = crypto.randomUUID();
-  for (const step of steps) jobs.push({id: crypto.randomUUID(), chain, episodeId, title, kind: step.kind, config: step.config, status: 'queued', progress: null, message: ''});
+  for (const step of steps) jobs.push({id: crypto.randomUUID(), chain, episodeId, title, kind: step.kind, config: step.config, resume: step.resume, status: 'queued', progress: null, message: ''});
   while (jobs.length > 60) { const i = jobs.findIndex(j => !['running', 'queued'].includes(j.status)); if (i < 0) break; jobs.splice(i, 1); }
   emit();
   pump();
@@ -35,9 +36,16 @@ export function cancel(episodeId) {
 
 export function retry(jobId) {
   const failed = jobs.find(j => j.id === jobId);
-  if (!failed) return;
+  if (!failed || !['error','cancelled'].includes(failed.status) || activeJob(failed.episodeId)) return;
   const rest = jobs.filter(j => j.chain === failed.chain && (j === failed || (j.status === 'cancelled' && jobs.indexOf(j) > jobs.indexOf(failed))));
-  enqueue(failed.episodeId, failed.title, rest.map(({kind, config}) => ({kind, config})));
+  enqueue(failed.episodeId, failed.title, rest.map(({kind, config, resume}) => {
+    if(!['asr','translate'].includes(kind))return {kind,config,resume};
+    const scope=kind==='asr'?'asr':'translation',current=prefs[scope];
+    // Retain the originally approved destination/model/languages, but allow a
+    // corrected session key for that exact scope and same-model budget tuning.
+    const budgets=current.provider===config.provider && current.endpoint===config.endpoint && current.model===config.model ? Object.fromEntries(['maxOutputTokens','batchCharacters','requestIntervalMs'].filter(k=>current[k]!==undefined).map(k=>[k,current[k]])) : {};
+    return {kind,resume,config:{...config,...budgets,key:getKey(scope,config)}};
+  }));
 }
 export const dismiss = jobId => { const i = jobs.findIndex(j => j.id === jobId); if (i >= 0 && !['running', 'queued'].includes(jobs[i].status)) jobs.splice(i, 1); emit(); };
 
@@ -65,7 +73,7 @@ async function execute(job, signal) {
     doc = await transcribe(episode.audio, job.config, {signal, onProgress: update});
   } else {
     if (!episode.doc) throw new Error('Create a transcript first.');
-    doc = await translate(episode.doc, job.config, {signal, onProgress: update});
+    doc = await translate(episode.doc, job.config, {signal, onProgress: update, resume: job.resume, onCheckpoint: checkpoint => { job.resume = checkpoint; }});
   }
   signal.throwIfAborted();
   const latest = await getEpisode(job.episodeId);

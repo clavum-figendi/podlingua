@@ -5,7 +5,7 @@ import {getProviderInfo} from '../provider-info.js';
 const KEY = 'podlingua-prefs-v2';
 const primary = tag => String(tag || '').toLowerCase().split('-')[0];
 const browserLanguage = primary(globalThis.navigator?.language) || 'en';
-export const LANGUAGES = ['en', 'fr', 'de', 'es', 'it', 'pt', 'nl', 'sv', 'da', 'no', 'fi', 'pl', 'cs', 'ro', 'hu', 'el', 'tr', 'ru', 'uk', 'ar', 'he', 'fa', 'hi', 'bn', 'zh', 'ja', 'ko', 'vi', 'th', 'id', 'ms', 'ca'];
+export const LANGUAGES = ['en', 'fr', 'de', 'es', 'it', 'pt', 'nl', 'sv', 'da', 'no', 'fi', 'pl', 'cs', 'ro', 'hu', 'el', 'tr', 'ru', 'uk', 'ar', 'he', 'fa', 'hi', 'bn', 'zh', 'ja', 'ko', 'vi', 'th', 'id', 'ms', 'ca', 'es-ES', 'es-US', 'pt-PT', 'pt-BR', 'zh-CN', 'zh-TW', 'lt', 'lv', 'et', 'sl', 'bg', 'hr', 'sk'];
 export const OPUS_PAIRS = {'en-fr': 'Xenova/opus-mt-en-fr', 'fr-en': 'Xenova/opus-mt-fr-en', 'en-de': 'Xenova/opus-mt-en-de', 'de-en': 'Xenova/opus-mt-de-en'};
 export const LOCAL_MODELS = [
   {kind: 'asr', id: 'Xenova/whisper-tiny', name: 'Whisper Tiny', note: 'Fastest'},
@@ -18,6 +18,7 @@ export const AUTO_MODEL = 'auto';
 const defaults = () => ({
   asr: {provider: 'local', model: 'Xenova/whisper-tiny', endpoint: '', region: ''},
   translation: {provider: 'local', model: AUTO_MODEL, endpoint: '', region: ''},
+  asrPresets: {}, translationPresets: {}, modelPreferenceVersion: 1,
   source: 'auto', target: browserLanguage,
   maxUploadMB: 100, timeoutSeconds: 900, diarization: true, speakerPreferenceVersion: 1, offlineOnly: false, allowDownload: false,
   reader: {layout: 'stacked', size: 20, timestamps: true, speakers: true, follow: true},
@@ -30,12 +31,24 @@ function load() {
     // Adopt the newly requested default for legacy v2 records, whose false was
     // written even without a user choice. Subsequent opt-outs retain version 1.
     if(stored.speakerPreferenceVersion !== 1){stored.diarization = true; stored.speakerPreferenceVersion = 1;}
+    if(stored.modelPreferenceVersion !== 1) {
+      const oldDefaults = {groq: 'llama-3.3-70b-versatile', fireworks: 'accounts/fireworks/models/llama-v3p3-70b-instruct', together: 'meta-llama/Llama-3.3-70B-Instruct-Turbo', gemini: 'gemini-2.5-flash'};
+      for(const value of [stored.translation, ...Object.entries(stored.translationPresets || {}).map(([provider, value]) => ({...value, provider}))]) {
+        if(!value)continue;
+        if(Object.hasOwn(oldDefaults,value.provider) && value.model === oldDefaults[value.provider])value.model = '';
+        if(value.provider === 'together' && value.endpoint === 'https://api.together.xyz/v1/chat/completions')value.endpoint = 'https://api.together.ai/v1/chat/completions';
+        if(value !== stored.translation)stored.translationPresets[value.provider] = value;
+      }
+      stored.modelPreferenceVersion = 1;
+    }
     return {...base, ...stored, asr: {...base.asr, ...stored.asr}, translation: {...base.translation, ...stored.translation}, reader: {...base.reader, ...stored.reader}};
   } catch { return defaults(); }
 }
 
 export const prefs = load();
-const secrets = {asr: '', translation: ''};
+const secrets = {asr: new Map(), translation: new Map()};
+const secretScope = (kind, config = prefs[kind]) => JSON.stringify([config.provider, config.endpoint || '']);
+const providerOptions = value => Object.fromEntries(['provider','model','endpoint','region','maxOutputTokens','batchCharacters','requestIntervalMs'].filter(key => value[key] !== undefined).map(key => [key,value[key]]));
 const session = {allowCloud: false};
 const listeners = new Set();
 export const onPrefs = fn => (listeners.add(fn), () => listeners.delete(fn));
@@ -53,11 +66,14 @@ export const providerOf = kind => providers(kind).find(p => p.id === prefs[kind]
 export function setProvider(kind, id) {
   const p = providers(kind).find(x => x.id === id);
   if (!p) throw new Error('Unknown provider.');
-  secrets[kind] = '';
-  savePrefs({[kind]: {provider: id, model: id === 'local' && kind === 'translation' ? AUTO_MODEL : p.model, endpoint: p.endpoint, region: ''}});
+  const snapshots = {...prefs[`${kind}Presets`], [prefs[kind].provider]: providerOptions(prefs[kind])};
+  const selected = {model: id === 'local' && kind === 'translation' ? AUTO_MODEL : p.model, endpoint: p.endpoint, region: '', maxOutputTokens: 2048, batchCharacters: 6000, requestIntervalMs: id === 'mistral' ? 2500 : 1500, ...providerOptions(snapshots[id] || {}), provider: id};
+  // Replace rather than merge provider-specific fields from the previous service.
+  prefs[kind] = selected;
+  savePrefs({[`${kind}Presets`]: snapshots, [kind]: selected});
 }
-export const getKey = kind => secrets[kind];
-export const setKey = (kind, value) => { secrets[kind] = String(value || ''); };
+export const getKey = (kind, config) => secrets[kind].get(secretScope(kind, config)) || '';
+export const setKey = (kind, value) => { secrets[kind].set(secretScope(kind), String(value || '')); for(const fn of listeners)fn(prefs); };
 export const cloudAllowed = () => session.allowCloud;
 export const allowCloud = value => { session.allowCloud = value === true; };
 
@@ -71,9 +87,10 @@ export function engineConfig(kind, overrides = {}) {
   const p = prefs[kind], source = overrides.source ?? prefs.source, target = overrides.target ?? prefs.target;
   const model = p.provider === 'local' && kind === 'translation' ? resolveLocalTranslationModel(source, target) : p.model;
   const config = {
-    provider: p.provider, model, endpoint: p.endpoint, region: p.region, key: secrets[kind], source, target,
+    provider: p.provider, model, endpoint: p.endpoint, region: p.region, key: getKey(kind), source, target,
+    maxOutputTokens: p.maxOutputTokens, batchCharacters: p.batchCharacters, requestIntervalMs: p.requestIntervalMs,
     allowCloud: session.allowCloud, allowDownload: prefs.allowDownload, offlineOnly: prefs.offlineOnly,
-    maxUploadMB: prefs.maxUploadMB, timeoutSeconds: prefs.timeoutSeconds, diarization: prefs.diarization, ...overrides,
+    maxUploadMB: prefs.maxUploadMB, timeoutSeconds: prefs.timeoutSeconds, diarization: prefs.diarization, ...Object.fromEntries(Object.entries(overrides).filter(([,value]) => value !== undefined)),
   };
   const info = getProviderInfo(kind, config.provider);
   config.diarization = kind === 'asr' && info?.integration === 'integrated' && info?.diarization === true && config.diarization === true;
