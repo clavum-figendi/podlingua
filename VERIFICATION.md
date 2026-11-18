@@ -1,5 +1,15 @@
 # Verification record
 
+## Interface rebuild (2026-11-18)
+
+The UI layer was rewritten (tabs, sheets, read-along player, Settings with Advanced). Domain modules and their unit tests are unchanged apart from removing the DOM half of `episode-sharing.js` and the old `offline.js` UI.
+
+- `npm test`: 110 passing Node tests (unchanged domain coverage).
+- `npm run build`: successful production build with the `/podlingua/` base.
+- `npm run test:ui`: 7 passing Chromium Playwright journeys against the production build with every directory, feed, artwork, media file and translation endpoint mocked (`tests/fixtures.js`): first run and language persistence; Discover → follow → publisher transcript → online (mocked LibreTranslate) translation → read-along with word lookup and seek; follow by feed link; queue and bulk selection; local audio import → mini player → transcript import → side-by-side layout; Settings theme, Advanced engine options and backup download; 390 px bottom tabs and bottom sheets. The previous 64 UI tests targeted removed markup and were retired with it.
+- Screens were reviewed at 1440×900 and 390×844 in light and dark themes.
+- **Not re-run in this rebuild:** real on-device Whisper/OPUS inference and the offline-reload path. The sandbox could not reach Hugging Face. `scripts/local-inference-smoke.mjs` replaces the two earlier smoke scripts for the new UI and should be run before deploying. The records below describe the previous interface.
+
 ## Executed locally against the production Vite build
 
 - `npm test`: 110 passing Node tests (document parsing/validation/export, Android JSON compatibility, overlap, Unicode tokenization, IndexedDB audio persistence and credential exclusion, provider request/response contracts, consent and URL validation, native ASR upload/poll seams, word punctuation/speaker fidelity, local-worker factory contracts).

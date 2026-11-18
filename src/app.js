@@ -1,118 +1,143 @@
-import './style.css';
-import { parseTranscript, normalizeDocument, exportTranscript, activeSegments, tokenize } from './core.js';
-import { asrProviders, translationProviders, transcribe, translate, lookup } from './engines.js';
-import { listEpisodes, saveEpisode, getEpisode, deleteEpisode, clearEpisodes } from './storage.js';
-import {initPlayerTools} from './player-tools.js';
-import {initDesignUI} from './design-ui.js';
-import {initSettingsExperience} from './settings-experience.js';
-import {initProviderInfo} from './provider-info-ui.js';
-import {initStudyActions} from './study-actions.js';
-import {initEpisodeSharing} from './episode-sharing.js';
-import {initConnectionsUI} from './connections-ui.js';
-import {initParityUI} from './parity-ui.js';
-import {matchesDownloadFilter} from './parity.js';
-import {initAudioEnhancements} from './audio-enhancements-ui.js';
-import {initPodcastUI} from './podcast-ui.js';
-import {initAppServices} from './app-services-ui.js';
-import {initOfflineUI} from './offline.js';
-import {safePodcastURL} from './library-services.js';
-const $ = s => document.querySelector(s);
-// Every variable interpolated into HTML is escaped; transcript text is never interpreted as markup.
-const esc = s => String(s ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-let episodes=[], current=null, audioURL, controller, jobGeneration=0, lookupController, lookupGeneration=0, lastJob=null;
-const revisions=new Map();
-let follow=true, previousActive='';
-let playerTools,podcastUI;
-$('#app').innerHTML=`
-<aside class="sidebar"><a class="brand" href="./"><span class="brand-mark">p<span>↗</span></span> podlingua<span class="beta">BETA</span></a>
-<div class="workspace-label">YOUR LISTENING SPACE</div><div class="nav-active">▤ <span>My library</span><span id="library-count">0</span></div>
-<div class="library-heading"><h2>Episodes</h2><button id="clear-library" class="text-button">Clear all</button></div><div id="library"></div>
-<div class="sidebar-bottom"><div class="privacy-dot"></div><strong>Yours, by default.</strong><p>Audio and transcripts stay in this browser unless you choose a provider and consent to transfer.</p><button id="settings-open">⚙ Engine settings</button><div class="footer-links"><a href="./CREDITS.html">Credits & licenses</a><a href="https://github.com/clavum-figendi/podlingua" target="_blank" rel="noopener">Source ↗</a></div></div></aside>
-<main><header class="topbar"><span>THE LISTENING ROOM <span class="tiny-separator">/</span> MY LIBRARY</span><span class="local-badge">● Browser workspace</span></header>
-<section class="intro"><div><p class="eyebrow">LESS SCROLLING. MORE UNDERSTANDING.</p><h1>Listen a little closer.</h1><p class="intro-copy">Your audio. Two languages. A new way to follow along.</p></div><label class="primary import-label">＋ Import audio<input aria-label="Import audio" id="audio-import" type="file" accept="audio/*,video/*" multiple></label></section>
-<section class="import-strip"><div class="strip-symbol">↳</div><div><strong>Start with something worth listening to.</strong><p>Drop in local audio, or bring a JSON, SRT or VTT transcript. No account required.</p></div><label class="secondary import-label">Import transcript<input id="transcript-import" aria-label="Import transcript" type="file" accept=".json,.srt,.vtt"></label></section>
-<div class="workspace-grid"><section class="reader-panel"><div class="episode-header"><div><p class="eyebrow" id="episode-meta">YOUR NEXT DISCOVERY</p><h2 id="episode-title">A little space to understand.</h2></div><span class="outline-badge" id="pair-badge">READ · LISTEN · LEARN</span></div>
-<div class="player"><div class="record">◉</div><div class="audio-area"><div class="player-label"><strong id="audio-label">Bring your own soundtrack</strong><span id="time-label">00:00</span></div><video id="audio" controls preload="metadata" playsinline></video><div class="player-options"><label>Speed <select id="speed" aria-label="Playback speed"><option value="0.75">0.75×</option><option value="1" selected>1×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option><option value="2">2×</option></select></label><span>Local files · never a sample transcript</span></div></div></div>
-<div class="reader-toolbar"><input id="search" type="search" aria-label="Search transcript" placeholder="⌕ Search transcript"><div class="reader-actions"><label class="check"><input id="follow" type="checkbox" checked>Follow audio</label><button id="font-down" aria-label="Decrease font size">A−</button><button id="font-up" aria-label="Increase font size">A＋</button><select id="layout" aria-label="Reading layout"><option value="stacked">Stacked</option><option value="columns">Columns</option></select><button id="display-open" aria-label="Reading options">☷</button></div></div>
-<div id="display-options" hidden><label><input id="timestamps" type="checkbox" checked> Timestamps</label><label><input id="speakers" type="checkbox" checked> Speakers</label><label><input id="rtl" type="checkbox"> Force RTL</label></div>
-<div class="language-head"><span id="source-label">ORIGINAL</span><span id="target-label">TRANSLATION · SEGMENT ALIGNED</span></div>
-<div id="transcript" tabindex="0"><div class="empty-state"><div class="empty-art"><span>“</span><i>↔</i><span>”</span></div><p class="eyebrow">MAKE ROOM FOR ANOTHER PERSPECTIVE</p><h3>Every listen opens a door.</h3><p>Import an episode to begin. A transcript brings the words into focus; translation opens them up.</p><div class="empty-steps"><span>01 &nbsp; Bring audio</span><span>02 &nbsp; Add words</span><span>03 &nbsp; Find meaning</span></div></div></div>
-<div class="reader-footer"><span id="segment-count">No transcript yet</span><div><select id="export-format" aria-label="Export format"><option value="json">JSON</option><option value="srt">SRT</option><option value="vtt">VTT</option><option value="text">Text</option></select><button id="export" disabled>Export transcript ↓</button></div></div></section>
-<aside class="study-panel"><p class="eyebrow">YOUR WORKFLOW</p><h2>From sound<br>to meaning.</h2><div class="workflow-step"><span>01</span><div><h3>Find the words</h3><p>Create a timed transcript from your local audio.</p><button id="transcribe">Transcribe episode ↗</button></div></div><div class="workflow-step"><span>02</span><div><h3>Change perspective</h3><p>Pair the original with a translation in your chosen language.</p><button id="translate">Translate transcript ↗</button></div></div><div class="workflow-step"><span>03</span><div><h3>Stay curious</h3><p>Tap a word in either language for a short machine-translation lookup.</p></div></div><div class="queue-box"><strong>A library, at your pace.</strong><p>Work through episodes one at a time. Keep this tab open.</p><button id="queue-asr">Queue missing transcripts</button><button id="queue-translation">Queue translations</button></div><div class="honest-note">BUILT FOR THE BROWSER<p>No Android Vosk or ML Kit, or guaranteed closed-tab processing. Podcast feeds/media must permit browser access; a proxy is optional and requires your consent. Availability depends on your browser and provider.</p></div></aside></div>
-<section class="status-box" aria-live="polite"><span id="status">Ready when you are. Start with a local file.</span><progress id="progress" max="100" hidden></progress><button id="cancel" hidden>Cancel</button><button id="retry" hidden>Retry</button></section><footer class="main-footer"><span>Podlingua · Your listening instrument</span><span><a href="./CREDITS.html">Credits & licenses</a> · <a href="https://github.com/clavum-figendi/podlingua" target="_blank" rel="noopener">Source ↗</a></span></footer></main>
-<dialog id="settings"><form method="dialog"><div class="dialog-top"><div><p class="eyebrow">YOU CHOOSE WHERE IT RUNS</p><h2>Engine settings</h2></div><button aria-label="Close settings">✕</button></div><p>Settings never start requests. API keys live in memory only and are cleared on reload. Models and hosted services have their own terms and limits.</p><div class="settings-grid">${[['asr','Transcription',asrProviders],['translation','Translation',translationProviders]].map(([kind,title,providers])=>`<fieldset><legend>${title}</legend><label>Provider<select id="${kind}-provider" aria-label="${title} provider">${providers.map(p=>`<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}</select></label><p class="provider-description" id="${kind}-description"></p><label>Model<input id="${kind}-model" aria-label="${title} model"></label><label>Endpoint<input id="${kind}-endpoint" type="url" aria-label="${title} endpoint"></label><label>API key · session only<input id="${kind}-key" type="password" autocomplete="off" aria-label="${title} API key"></label><label>Region<input id="${kind}-region" aria-label="${title} region"></label></fieldset>`).join('')}</div><div class="settings-grid"><label>Source language tag<input id="source" value="auto" placeholder="auto / en / de / zh-Hant"></label><label>Target language tag<input id="target" value="fr" placeholder="fr / ar / ja"></label><label>Maximum upload (MB)<input id="upload-limit" type="number" min="1" max="10000" value="100"></label><label>Timeout (seconds)<input id="timeout" type="number" min="1" max="7200" value="900"></label></div><label class="consent"><input id="cloud-consent" type="checkbox"> I allow audio/text transfer to my selected non-browser endpoint. Charges may apply.</label><label class="consent"><input id="download-consent" type="checkbox"> I allow local model downloads from model hosts (potentially hundreds of MB).</label><label class="consent"><input id="diarization" type="checkbox"> Request speaker labels where supported (not local Whisper).</label><p class="notice">Cancellation cannot undo uploads or charges. Browser CORS, model support, memory and quotas can limit availability. Local downloads are not bundled. Use explicit source tags for local translation and short-word lookup. Google Cloud output is machine translated by Google.</p><button class="primary">Done</button></form></dialog>
-<dialog id="word-popup"><div class="dialog-top"><h2 id="lookup-word"></h2><button id="lookup-close" aria-label="Close word lookup">✕</button></div><p id="lookup-direction"></p><p id="lookup-result" aria-live="polite"></p><div id="lookup-attribution"></div><small>Machine translation, not a dictionary. Context can change meaning.</small></dialog>`;
-const emptyHTML=$('#transcript').innerHTML;
-const billingNotice=document.createElement('p');billingNotice.className='provider-description';billingNotice.textContent='Set hard spending limits in your provider account before enabling hosted processing. This app cannot inspect included-credit balances or prevent provider-side paid spillover. No automatic retries or fallback providers.';$('#settings form').insertBefore(billingNotice,$('#settings form').lastElementChild);
-function status(message,error=false){$('#status').textContent=message;$('.status-box').classList.toggle('error',error);}
-function guarded(fn){return (...args)=>Promise.resolve().then(()=>fn(...args)).catch(e=>status(e.message,true));}
-function revision(id){return revisions.get(id)||0;}
-function invalidate(id){revisions.set(id,revision(id)+1);lookupGeneration++;lookupController?.abort();}
-function time(t){return `${Math.floor((t||0)/60).toString().padStart(2,'0')}:${Math.floor((t||0)%60).toString().padStart(2,'0')}`;}
-function settings(kind){return {provider:$(`#${kind}-provider`).value,model:$(`#${kind}-model`).value.trim(),endpoint:$(`#${kind}-endpoint`).value.trim(),key:$(`#${kind}-key`).value,region:$(`#${kind}-region`).value.trim(),source:$('#source').value.trim(),target:$('#target').value.trim(),allowCloud:$('#cloud-consent').checked,allowDownload:$('#download-consent').checked,offlineOnly:document.querySelector('#offline-models-only')?.checked===true,maxUploadMB:Number($('#upload-limit').value),timeoutSeconds:Number($('#timeout').value),diarization:$('#diarization').checked};}
-function consent(c){if(c.provider==='local'){if(c.offlineOnly)return confirm('Run on-device inference using downloaded models only?');if(!c.allowDownload)throw new Error('Enable local model download consent in Engine settings first.');return confirm('Run browser inference? Model files may be downloaded from Hugging Face (hundreds of MB). Processing can be slow.');}if(!c.allowCloud)throw new Error('Enable explicit cloud/transfer consent in Engine settings first.');return confirm(`Send audio/text to ${c.endpoint || c.provider}? Provider charges, retention and quotas apply. Retry may bill again.`);}
-function attribution(provider){if(provider==='google')return `<a class="translation-attribution google-attribution" href="https://translate.google.com" target="_blank" rel="noopener"><img src="./credits/google-translate/color-regular.png" srcset="./credits/google-translate/color-regular@2x.png 2x, ./credits/google-translate/color-regular@3x.png 3x" alt="powered by Google Translate"></a>`;const name=translationProviders.find(p=>p.id===provider)?.name || provider || 'imported source';return `<span class="translation-attribution">Translated by ${esc(name)}</span>`;}
-function providerChanged(kind,providers){const p=providers.find(x=>x.id===$(`#${kind}-provider`).value);$(`#${kind}-model`).value=p.model;$(`#${kind}-endpoint`).value=p.endpoint;$(`#${kind}-key`).value='';$(`#${kind}-region`).value='';$(`#${kind}-description`).textContent=p.description;if(kind==='translation'){$('#translate').textContent=p.id==='google'?'Translate with Google':'Translate transcript ↗';$('#queue-translation').textContent=p.id==='google'?'Translate queue with Google':'Queue translations';}}
-for(const [kind,providers] of [['asr',asrProviders],['translation',translationProviders]]){providerChanged(kind,providers);$(`#${kind}-provider`).onchange=()=>providerChanged(kind,providers);}
-async function refreshLibrary(){episodes=await listEpisodes();$('#library-count').textContent=episodes.length;$('#library').innerHTML=episodes.length?episodes.slice(0,20).map(e=>`<div class="library-item ${e.id===current?.id?'selected':''}"><button class="episode-open" data-id="${esc(e.id)}" aria-label="Open ${esc(e.title)}"><span class="episode-icon">${e.audio?'♫':'≡'}</span><span><strong>${esc(e.title)}</strong><small>${e.audio?'Audio':'Reading only'} · ${e.doc?e.doc.segments.length+' segments':'Not transcribed'}</small></span></button><button class="delete-episode" data-delete="${esc(e.id)}" aria-label="Delete ${esc(e.title)}">×</button></div>`).join(''):'<div class="library-empty">Your next favorite listen<br>belongs here.</div>';}
-async function persist(episode){const saved=await saveEpisode(episode);Object.assign(episode,saved);await refreshLibrary();}
-function selectEpisode(e){
- playerTools?.beforeSelect();lookupGeneration++;lookupController?.abort();
- const audio=$('#audio');audio.pause();current=e;previousActive='';audio.removeAttribute('src');if(audioURL)URL.revokeObjectURL(audioURL);audioURL=null;
- if(e.audio){audioURL=URL.createObjectURL(e.audio);audio.src=audioURL;}else if(e.audioUrl)audio.src=safePodcastURL(e.audioUrl);
- audio.load();$('#episode-title').textContent=e.title;$('#audio-label').textContent=e.audio||e.audioUrl?e.title:'Reading-only transcript · no audio attached';$('#episode-meta').textContent=e.audio?'LOCAL EPISODE':e.audioUrl?'PODCAST EPISODE · STREAMING':'READING ROOM';$('#pair-badge').textContent=e.doc?.targetLanguage?`${e.doc.language} ↔ ${e.doc.targetLanguage}`:'YOUR LISTENING SPACE';renderTranscript();
- window.dispatchEvent(new Event('podlingua:reader'));playerTools?.setEpisode(e).catch(error=>status(error.message,true));refreshLibrary().catch(error=>status(error.message,true));
-}
-function tokenHTML(text,language,side,segment){return tokenize(text,language).map(t=>t.isWord?`<button class="word" data-side="${side}" data-segment="${segment}" data-token="${esc(t.text)}">${esc(t.text)}</button>`:esc(t.text)).join('');}
-function renderTranscript(){const doc=current?.doc;$('#export').disabled=!doc;$('#segment-count').textContent=doc?`${doc.segments.length} segments · ${doc.provider || 'import'}`:'No transcript yet';$('#source-label').textContent=`ORIGINAL${doc?' · '+doc.language.toUpperCase():''}`;$('#target-label').textContent=doc?.targetLanguage?`${doc.targetLanguage.toUpperCase()} · SEGMENT ALIGNED`:'TRANSLATION · SEGMENT ALIGNED';if(!doc){$('#transcript').innerHTML=emptyHTML;return;}const query=$('#search').value.toLocaleLowerCase();$('#transcript').innerHTML=doc.segments.map((s,i)=>{if(query&&!`${s.text} ${s.translation||''} ${s.speaker||''}`.toLocaleLowerCase().includes(query))return '';let original=tokenHTML(s.text,doc.language,'source',i);if(s.words?.length){let cursor=0,matches=[];for(const [wi,w] of s.words.entries()){const at=s.text.indexOf(w.text,cursor);if(at<0){matches=[];break;}matches.push({at,end:at+w.text.length,wi,text:w.text});cursor=at+w.text.length;}if(matches.length){cursor=0;original=matches.map(m=>{const before=esc(s.text.slice(cursor,m.at));cursor=m.end;return before+`<span class="timed-word" data-start="${s.words[m.wi].start}" data-end="${s.words[m.wi].end}">${tokenHTML(m.text,doc.language,'source',i)}</span>`;}).join('')+esc(s.text.slice(cursor));}}
-return `<article class="segment" data-index="${i}"><div class="segment-meta"><button class="timestamp" data-seek="${s.start}" aria-label="Seek to ${time(s.start)}">${time(s.start)}</button>${s.speaker?`<span class="speaker">${esc(s.speaker)}</span>`:''}</div><div class="segment-pair"><p class="original" lang="${esc(doc.language)}" dir="auto">${original}</p>${s.translation!==undefined?`<p class="translation" lang="${esc(doc.targetLanguage)}" dir="auto">${tokenHTML(s.translation,doc.targetLanguage,'target',i)}${attribution(doc.translationProvider)}</p>`:'<p class="translation missing">Translation is a new perspective away.</p>'}</div></article>`;}).join('')||'<p class="no-results">No matching segments.</p>';sync();}
-function sync(){if(!current?.doc)return;const active=activeSegments(current.doc,$('#audio').currentTime);for(const el of document.querySelectorAll('.segment'))el.classList.toggle('active',active.includes(Number(el.dataset.index)));for(const el of document.querySelectorAll('.timed-word'))el.classList.toggle('word-active',$('#audio').currentTime>=Number(el.dataset.start)&&$('#audio').currentTime<Number(el.dataset.end));const key=active.join(',');if(key!==previousActive&&follow&&active.length){$(`.segment[data-index="${active[0]}"]`)?.scrollIntoView({behavior:'smooth',block:'nearest'});}previousActive=key;$('#time-label').textContent=time($('#audio').currentTime);}
-$('#audio').ontimeupdate=sync;$('#audio').onerror=()=>{if(current?.audio)status('This browser cannot decode this audio file. Try a supported MP3, WAV, M4A or Ogg file.',true);};$('#speed').onchange=()=>$('#audio').playbackRate=Number($('#speed').value);
-$('#audio-import').onchange=guarded(async e=>{const files=[...e.target.files];for(const file of files){const episode={id:crypto.randomUUID(),title:file.name.replace(/\.[^.]+$/,''),audio:file,createdAt:Date.now()};await persist(episode);if(file===files[0])selectEpisode(episode);}status(`${files.length} audio file${files.length===1?'':'s'} saved to this browser.`);e.target.value='';});
-$('#transcript-import').onchange=guarded(async e=>{const file=e.target.files[0];if(!file)return;const selected=current?.audio||current?.audioUrl?current:null;const version=selected?revision(selected.id):0;const doc=parseTranscript(await file.text(),file.name);if(selected&&(!await getEpisode(selected.id)||revision(selected.id)!==version))throw new Error('Episode changed during import. Please import again.');if(selected?.doc&&!confirm('Replace the current transcript? Existing translations will be replaced.'))return;const episode=selected?{...selected,doc}:{id:crypto.randomUUID(),title:file.name.replace(/\.[^.]+$/,''),doc,createdAt:Date.now()};invalidate(episode.id);await persist(episode);selectEpisode(episode);status(selected?'Transcript attached to your audio episode.':'Transcript imported. Reading only until audio is available.');e.target.value='';});
-$('#library').onclick=guarded(async e=>{const del=e.target.closest('[data-delete]');if(del){if(!confirm('Delete this episode, saved audio and transcript from this browser?'))return;const id=del.dataset.delete;invalidate(id);await deleteEpisode(id);if(await getEpisode(id))throw new Error('Delete failed');if(current?.id===id){current=null;$('#audio').pause();$('#audio').removeAttribute('src');$('#audio').load();if(audioURL)URL.revokeObjectURL(audioURL);$('#episode-title').textContent='A little space to understand.';renderTranscript();}await refreshLibrary();status('Episode deleted locally. This does not delete provider uploads.');return;}const open=e.target.closest('[data-id]');if(open){const episode=await getEpisode(open.dataset.id);if(episode)selectEpisode(episode);}});
-$('#clear-library').onclick=guarded(async()=>{if(!confirm('Clear all saved audio and transcripts in this browser? Export anything you want to keep first.'))return;for(const e of episodes)invalidate(e.id);cancelJob();await clearEpisodes();if((await listEpisodes()).length)throw new Error('Library clear failed');current=null;$('#audio').pause();$('#audio').removeAttribute('src');$('#audio').load();if(audioURL)URL.revokeObjectURL(audioURL);$('#episode-title').textContent='A little space to understand.';renderTranscript();await refreshLibrary();status('Local library cleared. Provider uploads are not deleted.');});
-$('#search').oninput=renderTranscript;$('#layout').onchange=()=>$('#transcript').classList.toggle('columns',$('#layout').value==='columns');let fontSize=19;$('#font-up').onclick=()=>{fontSize=Math.min(30,fontSize+1);$('#transcript').style.setProperty('--reader-size',fontSize+'px');};$('#font-down').onclick=()=>{fontSize=Math.max(14,fontSize-1);$('#transcript').style.setProperty('--reader-size',fontSize+'px');};$('#display-open').onclick=()=>$('#display-options').hidden=!$('#display-options').hidden;for(const type of ['timestamps','speakers'])$(`#${type}`).onchange=()=>$('#transcript').classList.toggle('hide-'+type,!$(`#${type}`).checked);$('#rtl').onchange=()=>$('#transcript').classList.toggle('force-rtl',$('#rtl').checked);$('#follow').onchange=()=>{follow=$('#follow').checked;previousActive='';sync();};function disableFollow(){follow=false;$('#follow').checked=false;}$('#transcript').addEventListener('wheel',disableFollow,{passive:true});$('#transcript').addEventListener('touchmove',disableFollow,{passive:true});$('#transcript').addEventListener('keydown',e=>{if(['ArrowDown','ArrowUp','PageDown','PageUp','Home','End'].includes(e.key))disableFollow();});
-$('#export').onclick=guarded(()=>{if(!current?.doc)return;const format=$('#export-format').value;const text=exportTranscript(current.doc,format);const url=URL.createObjectURL(new Blob([text],{type:format==='json'?'application/json':'text/plain;charset=utf-8'}));const a=document.createElement('a');a.href=url;a.download=current.title+'.'+(format==='text'?'txt':format);a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);status('Exported your transcript. JSON retains measured word timing and metadata.');});
-$('#settings-open').onclick=()=>$('#settings').showModal();
-$('#transcript').onclick=guarded(async e=>{const seek=e.target.closest('[data-seek]');if(seek){if(!current?.audio&&!current?.audioUrl){status('No audio attached. This is a reading-only transcript.');return;}$('#audio').currentTime=Number(seek.dataset.seek);sync();return;}const token=e.target.closest('[data-token]');if(!token||!current?.doc)return;const doc=current.doc;const reverse=token.dataset.side==='target';const source=reverse?doc.targetLanguage:doc.language;const target=reverse?doc.language:doc.targetLanguage||$('#target').value;$('#lookup-word').textContent=token.dataset.token;$('#lookup-direction').textContent=`${source} → ${target}`;$('#lookup-result').textContent='Preparing lookup…';$('#lookup-attribution').innerHTML='';$('#word-popup').showModal();const config=settings('translation');try{if(!consent(config)){$('#lookup-result').textContent='Lookup not sent.';return;}}catch(error){$('#lookup-result').textContent=error.message;return;}lookupController?.abort();lookupController=new AbortController();const gen=++lookupGeneration;$('#lookup-result').textContent='Looking up…';try{const value=await lookup(token.dataset.token,source,target,config,{signal:lookupController.signal});if(gen===lookupGeneration){$('#lookup-result').textContent=value;$('#lookup-attribution').innerHTML=attribution(config.provider);}}catch(error){if(gen===lookupGeneration)$('#lookup-result').textContent=error.message;}});
-$('#lookup-close').onclick=()=>{lookupGeneration++;lookupController?.abort();$('#word-popup').close();};$('#word-popup').addEventListener('cancel',()=>{lookupGeneration++;lookupController?.abort();});
-function cancelJob(){jobGeneration++;controller?.abort();controller=null;$('#cancel').hidden=true;$('#retry').hidden=!lastJob;$('#progress').hidden=true;status('Cancelled. Completed uploads or billable requests cannot be undone.');}
-$('#cancel').onclick=cancelJob;
-async function runJobs(kind,ids){if(controller)throw new Error('Cancel the current job before starting another.');const config=settings(kind==='asr'?'asr':'translation');if(!consent(config))return {cancelled:true};lastJob={kind,ids:[...ids]};$('#retry').hidden=true;const gen=++jobGeneration;const queuedVersions=new Map(ids.map(id=>[id,revision(id)]));controller=new AbortController();const signal=controller.signal;$('#cancel').hidden=false;$('#progress').hidden=false;let completed=0;try{for(const id of ids){signal.throwIfAborted();const episode=await getEpisode(id);if(!episode)continue;if(kind==='asr'&&!episode.audio)continue;if(kind==='translation'&&!episode.doc)continue;const version=queuedVersions.get(id);if(revision(id)!==version||signal.aborted||gen!==jobGeneration)continue;status(`${kind==='asr'?'Transcribing':'Translating'} ${episode.title} · ${completed+1}/${ids.length}`);const opts={signal,onProgress:p=>{if(gen!==jobGeneration)return;const value=typeof p==='number'?p:p.progress;$('#progress').value=Number(value)||0;if(p.status)status(`${episode.title} · ${p.status}${Number.isFinite(value)?' · '+Math.round(value)+'%':''}`);}};const result=kind==='asr'?await transcribe(episode.audio,config,opts):await translate(episode.doc,config,opts);if(signal.aborted||gen!==jobGeneration)break;const latest=await getEpisode(id);if(!latest||revision(id)!==version||signal.aborted||gen!==jobGeneration){status('Skipped a changed or deleted episode.');continue;}if(JSON.stringify(latest.doc)!==JSON.stringify(episode.doc))throw new Error('Episode changed or was deleted in another tab. Result not saved.');const updated={...latest,doc:normalizeDocument(result)};await persist(updated);if(current?.id===id&&revision(id)===version&&gen===jobGeneration&&!signal.aborted){current=updated;renderTranscript();$('#pair-badge').textContent=updated.doc.targetLanguage?`${updated.doc.language} ↔ ${updated.doc.targetLanguage}`:'TRANSCRIBED';}completed++;}if(gen===jobGeneration)status(`Finished ${completed} episode${completed===1?'':'s'}.`);}catch(error){if(gen===jobGeneration){status(error.name==='AbortError'?'Cancelled. Provider-side work may still continue.':error.message,true);$('#retry').hidden=false;throw error;}return {cancelled:true};}finally{if(gen===jobGeneration){controller=null;$('#cancel').hidden=true;$('#progress').hidden=true;}}return {completed,cancelled:gen!==jobGeneration};}
-$('#transcribe').onclick=guarded(async()=>{if(!current?.audio)throw new Error('Import and select an audio episode first.');if(current.doc&&!confirm('Replace this transcript and its translations?'))return;invalidate(current.id);await runJobs('asr',[current.id]);});$('#translate').onclick=guarded(async()=>{if(!current?.doc)throw new Error('Import or generate a transcript first.');await runJobs('translation',[current.id]);});$('#queue-asr').onclick=guarded(async()=>{const ids=(await listEpisodes()).filter(e=>e.audio&&!e.doc).map(e=>e.id);if(!ids.length)throw new Error('No audio episodes are missing transcripts.');await runJobs('asr',ids);});$('#queue-translation').onclick=guarded(async()=>{const target=$('#target').value;const ids=(await listEpisodes()).filter(e=>e.doc&&(e.doc.targetLanguage!==target||e.doc.segments.some(s=>s.translation===undefined))).map(e=>e.id);if(!ids.length)throw new Error('No existing transcripts need this target translation.');await runJobs('translation',ids);});$('#retry').onclick=guarded(()=>lastJob&&runJobs(lastJob.kind,lastJob.ids));
-const bridge={
- async startTranscription(expectedId){if(controller)throw new Error('Wait for the current job, or cancel it first.');const id=expectedId||current?.id,episode=id&&await getEpisode(id);if(!episode||current?.id!==id)throw new Error('Choose this episode again before starting.');if(!episode.audio){if(episode.audioUrl)await bridge.showAudioHelp(id);throw new Error('Get audio for this episode before creating its transcript.');}if(episode.doc&&!confirm('Replace this transcript and its translations?'))return {cancelled:true};invalidate(id);return runJobs('asr',[id]);},
- async startTranslation(expectedId){const id=expectedId||current?.id,episode=id&&await getEpisode(id);if(!episode||current?.id!==id)throw new Error('Choose this episode again before starting.');if(!episode.doc)throw new Error('Create or import a transcript first.');return runJobs('translation',[id]);},
- getEpisode,listEpisodes,status,currentEpisode:()=>current?.id?getEpisode(current.id):undefined,
- async pauseAndFlush(){document.querySelector('#audio').pause();await playerTools?.flush();},
- async saveEpisode(episode){const saved=await saveEpisode(episode);bridge.onSaved(saved);window.dispatchEvent(new Event('podlingua:library'));return saved;},
- async deleteEpisode(id){invalidate(id);await deleteEpisode(id);window.dispatchEvent(new Event('podlingua:library'));},
- async refresh(){await refreshLibrary();window.dispatchEvent(new Event('podlingua:library'));},
- async openEpisode(id,{play=false}={}){const episode=await getEpisode(id);if(!episode)throw new Error('Episode no longer exists.');selectEpisode(episode);if(play)await $('#audio').play();return episode;},
- onSaved(saved){if(current?.id===saved.id)Object.assign(current,saved);},
+import '@fontsource-variable/atkinson-hyperlegible-next';
+import '@fontsource-variable/literata';
+import './styles/app.css';
+import {html, raw, patch, on, setErrorHandler, guard, go} from './ui/dom.js';
+import {icon} from './ui/icons.js';
+import {cover, ring} from './ui/parts.js';
+import {toast, refreshSheet, sheetOpen} from './ui/feedback.js';
+import {store, onStore, reload, coverOf, showTitle} from './services/store.js';
+import {onPrefs} from './services/prefs.js';
+import {onJobs, jobs, setBlockedHandler} from './services/jobs.js';
+import {media, player, onPlayer, onTick, load, toggle, skipBy, current} from './services/player.js';
+import * as library from './services/library.js';
+import {onOffline} from './services/offline.js';
+import {openEpisode, openActivity, openAudioHelp, openProcess} from './views/sheets.js';
+import home from './views/home.js';
+import discover from './views/discover.js';
+import libraryView from './views/library.js';
+import show from './views/show.js';
+import preview from './views/preview.js';
+import reader from './views/reader.js';
+import settings from './views/settings.js';
+import stats from './views/stats.js';
+
+const routes = {home, discover, library: libraryView, show, preview, play: reader, settings, stats};
+const tabs = [['home', 'home', 'Listen'], ['discover', 'discover', 'Discover'], ['library', 'library', 'Library']];
+
+document.querySelector('#app').innerHTML = String(html`
+  <div class="shell">
+    <nav class="rail" aria-label="Main">
+      <a class="brand" href="#/home" aria-label="Podlingua home">${raw('<svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="9" fill="var(--lagoon)"/><rect x="7" y="10" width="18" height="4" rx="2" fill="#fff"/><rect x="7" y="18" width="12" height="4" rx="2" fill="var(--marker)"/></svg>')}<span>podlingua</span></a>
+      ${tabs.map(([route, glyph, label]) => html`<a class="rail-link" href="#/${route}" data-route="${route}">${icon(glyph)}<span>${label}</span></a>`)}
+      <button type="button" class="rail-link rail-activity" data-act="activity" hidden>${icon('wave')}<span>Activity</span></button>
+      <a class="rail-link rail-settings" href="#/settings" data-route="settings">${icon('settings')}<span>Settings</span></a>
+    </nav>
+    <main id="view" tabindex="-1"></main>
+    <div id="player"></div>
+  </div>
+  <div id="media-dock"></div>`);
+document.querySelector('#media-dock').append(media);
+
+setErrorHandler(error => { console.error(error); toast(error?.message || String(error), {error: true}); });
+
+let route = {name: 'home', args: []};
+const parse = () => {
+  const [name = 'home', ...args] = location.hash.replace(/^#\/?/, '').split('?')[0].split('/');
+  return {name: routes[name] ? name : 'home', args: args.map(decodeURIComponent)};
 };
-Object.assign(bridge,initAppServices(bridge));
-playerTools=initPlayerTools(bridge);
-initAudioEnhancements(bridge);
-podcastUI=initPodcastUI(bridge);
-initOfflineUI();
-initDesignUI();
-initSettingsExperience();
-initProviderInfo();
-const studyActions=initStudyActions(bridge);bridge.openStudy=(kind,id)=>studyActions.open(kind,id);
-initEpisodeSharing(bridge);
-initConnectionsUI(bridge);
-initParityUI(bridge).catch(e=>status(e.message,true));
-window.addEventListener('podlingua:library',()=>{refreshLibrary().catch(e=>status(e.message,true));});
-refreshLibrary().catch(e=>status(e.message,true));
-let automaticWork=false;
-setInterval(async()=>{
- if(automaticWork||document.hidden)return;automaticWork=true;
- try{const db=await import('./catalog.js'),state=await db.getAppState(),prefs=state.settings||{},feeds=await db.listSubscriptions();
-  document.documentElement.dataset.theme=prefs.theme||'light';
-  for(const feed of feeds){if(prefs.refreshMinutes>0&&feed.keepUpdated!==false&&Date.now()-(feed.lastRefresh||0)>prefs.refreshMinutes*60000)await db.refreshSubscription(feed.id,{proxy:prefs.proxy,allowProxy:prefs.allowProxy});}
-  if(prefs.autoDownload){const rows=await listEpisodes(),limit=Number.isFinite(prefs.autoDownloadLimit)?prefs.autoDownloadLimit:3,capacity=Math.max(0,limit-rows.filter(e=>e.audio&&e.downloadedAt).length);const selected=rows.filter(e=>e.audioUrl&&!e.audio&&!e.played&&!e.archived&&(prefs.includeExplicit!==false||!e.explicit)&&feeds.some(f=>f.id===e.feedId&&f.autoDownload&&matchesDownloadFilter(e,f))).sort((a,b)=>(b.published||0)-(a.published||0)).slice(0,capacity);for(const episode of selected)await bridge.downloadEpisode(episode.id,{background:true});}
-  if(prefs.refreshMinutes>0||prefs.autoDownload)window.dispatchEvent(new Event('podlingua:library'));
- }catch(error){status('Foreground podcast automation: '+error.message,true);}finally{automaticWork=false;}
-},60000);
+
+let frame = 0;
+function render() {
+  if (frame) return;
+  frame = requestAnimationFrame(() => {
+    frame = 0;
+    const view = routes[route.name];
+    patch(document.querySelector('#view'), String(view.render(...route.args)));
+    view.mounted?.();
+    renderPlayer();
+    for (const a of document.querySelectorAll('[data-route]')) a.toggleAttribute('aria-current', a.dataset.route === route.name || (route.name === 'show' && a.dataset.route === 'library') || (route.name === 'preview' && a.dataset.route === 'discover'));
+    const activity = document.querySelector('.rail-activity'), active = jobs.some(j => j.status === 'running' || j.status === 'queued');
+    activity.hidden = !jobs.length; activity.classList.toggle('busy', active);
+    document.body.classList.toggle('route-play', route.name === 'play');
+    document.body.classList.toggle('has-video', player.hasVideo);
+    document.documentElement.dataset.theme = store.state.settings.theme || 'system';
+    if (sheetOpen()) refreshSheet();
+  });
+}
+
+function navigate() {
+  const next = parse();
+  if (next.name !== route.name) routes[route.name].leave?.();
+  route = next;
+  routes[route.name].enter?.(...route.args);
+  document.title = `${routes[route.name].title?.(...route.args) || 'Podlingua'} · Podlingua`;
+  render();
+  requestAnimationFrame(() => { window.scrollTo(0, 0); document.querySelector('#view').scrollTop = 0; });
+}
+
+function renderPlayer() {
+  const e = current(), el = document.querySelector('#player');
+  el.hidden = !e || route.name === 'play';
+  if (el.hidden) return;
+  const running = jobs.find(j => j.status === 'running');
+  patch(el, String(html`
+    <div class="mini" data-key="mini">
+      <span class="mini-progress"><i id="mini-progress"></i></span>
+      <button type="button" class="mini-open" data-act="read" data-id="${e.id}" aria-label="Open player and transcript">
+        ${cover(coverOf(e), showTitle(e) || e.title, 'sm')}
+        <span class="mini-text"><span class="mini-title">${e.title}</span><span class="mini-sub">${running ? html`${ring(running.progress)} ${running.message || 'Working'}` : player.error || showTitle(e)}</span></span>
+      </button>
+      <span class="mini-controls">
+        <button type="button" class="icon-btn hide-sm" data-act="skip" data-dir="-1" aria-label="Skip back">${icon('back')}</button>
+        <button type="button" class="play-btn" data-act="toggle" aria-label="${media.paused ? 'Play' : 'Pause'}">${icon(media.paused ? 'play' : 'pause')}</button>
+        <button type="button" class="icon-btn" data-act="skip" data-dir="1" aria-label="Skip forward">${icon('forward')}</button>
+      </span>
+    </div>`));
+  updateMini(media);
+}
+function updateMini(m) {
+  const bar = document.querySelector('#mini-progress');
+  if (bar) bar.style.width = `${m.duration ? (m.currentTime / m.duration * 100).toFixed(2) : 0}%`;
+}
+
+on('click', {
+  async play(el) {
+    const id = el.dataset.id, e = store.byId.get(id);
+    if (player.id === id && media.currentSrc) return toggle();
+    if (e && !e.audio && !e.audioUrl) { await load(id); return go('play'); }
+    await load(id, {play: true});
+  },
+  async read(el) { if (el.dataset.id && el.dataset.id !== player.id) await load(el.dataset.id); go('play'); },
+  toggle: () => toggle(),
+  skip: el => skipBy(Number(el.dataset.dir)),
+  episode: el => openEpisode(el.dataset.id),
+  process: el => openProcess(el.dataset.id, el.dataset.kind),
+  activity: () => openActivity(),
+  back: () => history.length > 1 ? history.back() : go('home'),
+  go: el => go(el.dataset.to),
+  show: el => go('show/' + encodeURIComponent(el.dataset.id)),
+  preview: el => go('preview/' + encodeURIComponent(el.dataset.id)),
+  async subscribe(el) { const feed = await library.subscribe(el.dataset.url); toast(`Subscribed to ${feed.title || 'podcast'}`, {action: {label: 'Open', run: () => go('show/' + encodeURIComponent(feed.id))}}); },
+  async 'queue-toggle'(el) { const id = el.dataset.id, queued = store.state.queue.includes(id); await library.queue(queued ? 'remove' : 'add', queued ? {id} : {ids: [id]}); toast(queued ? 'Removed from queue' : 'Added to queue'); },
+  'queue-remove': el => library.queue('remove', {id: el.dataset.id}),
+  'queue-move': el => library.queue('move', {id: el.dataset.id, delta: Number(el.dataset.delta)}),
+});
+
+setBlockedHandler(id => openAudioHelp(id));
+onStore(render); onPrefs(render); onJobs(render); onPlayer(render); onOffline(render);
+onTick(m => { updateMini(m); routes[route.name].tick?.(m); });
+
+document.addEventListener('keydown', guard(async e => {
+  if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey || document.querySelector('dialog[open]') || e.target.closest('input,textarea,select,[contenteditable]')) return;
+  if (e.key === ' ' && !e.target.closest('button,a') && player.id) { e.preventDefault(); await toggle(); }
+  else if (e.key === 'ArrowLeft' && player.id) skipBy(-1);
+  else if (e.key === 'ArrowRight' && player.id) skipBy(1);
+  else if (e.key === '/') { e.preventDefault(); go('discover'); requestAnimationFrame(() => document.querySelector('#discover-q')?.focus()); }
+}));
+
+window.addEventListener('hashchange', navigate);
+window.addEventListener('podlingua:render', render);
+library.startAutomation(error => toast(error.message, {error: true}));
+await reload().catch(error => toast(error.message, {error: true}));
+if (store.state.lastEpisodeId && store.byId.has(store.state.lastEpisodeId)) load(store.state.lastEpisodeId).catch(() => {});
+navigate();

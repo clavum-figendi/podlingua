@@ -8,37 +8,48 @@ An **unofficial, independent browser podcast manager** with the transcription/tr
 - [GPL-3.0 license](LICENSE)
 - [Dependency inventory](public/dependency-inventory.json) and [verbatim dependency notices](public/THIRD_PARTY_NOTICES.txt)
 
+## Using it
+
+Three tabs and a player — **Listen**, **Discover**, **Library** — plus **Settings** (a gear). On phones they sit in a bottom tab bar; on larger screens in a left rail.
+
+- **Listen** starts with a one-line demo of read-along and a language pair (what you listen to → what you read in). Afterwards it shows *Continue*, *Up next*, *New* episodes and your shows.
+- **Discover** has one search box: type a show or topic to search Apple Podcasts, fyyd or Podcast Index, or paste a feed or website link to follow it directly. Top charts for your country load when you open it; topic chips are tuned to the language you are learning. Tap a result to look inside before following.
+- **Library** groups Shows, New, Queue, Saved, Loved, History, Files and All, with filter, sort, hide-played and multi-select (queue, download, mark played, love, archive, transcribe, delete). The ⋯ menu adds files, folders, transcripts, OPML and batch processing.
+- **Every episode** opens a sheet with Play / Read along, labelled icon actions, and two status rows: *Transcript* and *Translation*. **Read along** asks only what it needs — spoken language, target language, publisher transcript vs. speech recognition, and *This device* vs. *Online* — then runs download → transcript → translation in the background. The Start button states what will happen (model download or which service receives data); pressing it is the consent.
+- **The player** keeps a mini bar while you browse. Opened, it shows the transcript beside the controls: the line being heard is swept with a highlighter (word-accurate when the transcript has word timings), the view follows the audio until you scroll, and tapping any word in either language gives a machine-translation lookup with *Play from here*. Speed, sleep timer, bookmarks, A/B loop, clarity (silence skipping, quiet-speech boost), chapters, next-in-queue, picture-in-picture and export are one tap away.
+- **Settings** shows only appearance, languages, where processing runs, skip lengths, offline mode, storage and backup. Everything technical — providers, models, endpoints and session-only keys, the on-device model library, the provider guide, limits, automation, queue policy, proxy, directory keys, gpodder/Nextcloud sync, private feeds, feed-file import and history resets — lives under **Advanced**.
+
+Interface type is Atkinson Hyperlegible Next (UI) and Literata (reading), both OFL-1.1 and bundled; icons are original. Light, dark and system themes, keyboard focus, reduced motion and 390 px phones are supported. Keyboard: Space play/pause, ←/→ skip, / search.
+
 ## What it does
 
 ### Guided transcript and translation actions
 
 **Current relay status:** assisted download uses an independent Cloudflare Worker in the dedicated Podlingua account. Paloma's relay remains disabled and has no app connection. Cloudflare confirmed Workers Free during deployment; no paid upgrade was made. Users do not need a Cloudflare account or VPN. See `server/README.md` for current bounds and the distinction from the retired Node relay.
 
-Use **Create transcript** or **Translate** directly in an episode list or above the reader. The guide shows the selected episode, missing prerequisites, human-readable language choices, local model choices, explicit download/transfer permission, progress and cancellation. The primary action remains visible on narrow screens; advanced settings retain all provider/model/endpoint/key options. Available publisher transcripts can be imported from the same guide without speech recognition. Job errors and cancellation are not reported as successful completion.
+Transcription and translation start from **Read along** on any episode, in the player, or in batch from the Library menu. The sheet shows missing prerequisites (audio, a transcript, an explicit spoken language for on-device translation), lets you pick a publisher transcript when the feed advertises one, and lists the steps that will run. Progress, cancellation and retry appear in the episode sheet, the mini player and **Activity**. Errors and cancellation are never reported as success.
 
-If a publisher blocks browser audio access, **Get audio for this episode** offers an explicit recovery: open the publisher recording, save it using the browser/player menu, then attach that saved audio to the existing episode. This preserves its identity, transcript and listening state. Failed URLs are not automatically retried during the page session; retry is explicit. For supported Podigee recordings, **Use relay and get audio** now retrieves and attaches the recording automatically, then returns to the transcript guide. This explicit action sends that recording URL/audio through the separate Podlingua relay; it grants no AI-upload or model-download permission. Manual save/attach remains available for other hosts. GitHub Pages still cannot change publisher headers: the relay is a separate restricted server, not a browser workaround. See [relay limits, privacy and operations](server/README.md).
+If a publisher blocks browser audio access, **Get the audio** offers an explicit recovery: open the publisher recording, save it using the browser/player menu, then attach that saved audio to the existing episode. This preserves its identity, transcript and listening state. Failed URLs are not automatically retried during the page session; retry is explicit. For supported Podigee recordings, **Use relay** now retrieves and attaches the recording automatically, then returns to the transcript guide. This explicit action sends that recording URL/audio through the separate Podlingua relay; it grants no AI-upload or model-download permission. Manual save/attach remains available for other hosts. GitHub Pages still cannot change publisher headers: the relay is a separate restricted server, not a browser workaround. See [relay limits, privacy and operations](server/README.md).
 
-**Install app** now invokes the browser install prompt directly from its own user click, separately from shell caching. The app no longer suppresses the native install banner. Browser/OS installation support varies.
+**Install app** (Settings) invokes the browser install prompt from its own click, separately from offline caching. The native install banner is not suppressed. Browser/OS installation support varies.
 
-**Share episode** previews the exact text/link, optionally includes the current playback position, uses native sharing where available, and offers clipboard fallback. Saved audio can also be exported as a file. Review private subscription tokens and publisher rights before sharing.
+**Share** previews the exact text/link, optionally includes the current position, uses native sharing where available, and offers copy and saved-audio export. Review private subscription tokens and publisher rights before sharing.
 
 ### Discovery, onboarding and processing settings
 
-Discover now offers explicit topic suggestions, Apple/fyyd/Podcast Index selection, clear loading/empty/error states, retry/cancel and stale-result protection. Suggestions fill the search box; they do not silently send a query. Podcast Index uses your own session-only API credentials and documented request signing, with no shared key or proxy forwarding.
+Discover searches Apple, fyyd or Podcast Index with loading, empty, error, retry and cancel states and stale-result protection. Opening Discover requests the Apple top chart for your country (country code only); tapping a topic chip runs that search. Podcast Index uses your own session-only API credentials and documented request signing, with no shared key or proxy forwarding.
 
-A first-run setup guide can be skipped, replayed or disabled in Engine settings. Presentation uses system sans-serif fonts and a restrained layout. Transcription and translation have independent on-device/online selectors. The provider comparison distinguishes keyless access, free tiers, one-time credits and paid/account-dependent offers, plus actual adapter speaker-diarization support. See [the dated provider guide and official sources](public/PROVIDERS.md).
+Transcription and translation have independent *This device* / *Online* choices. On-device translation picks the smallest suitable model automatically (an OPUS pair when one matches, otherwise M2M100) unless you choose a model under Advanced. The provider guide distinguishes keyless access, free tiers, one-time credits and paid/account-dependent offers, plus adapter speaker-diarization support. See [the dated provider guide and official sources](public/PROVIDERS.md).
 
 The on-device library offers explicit download, cache-only verification, selection and removal for seven supported Whisper/OPUS/M2M100 models. Download consent is separate from online-transfer consent. “Use downloaded models only” disables model-host access; missing model files fail rather than downloading. A real test downloaded Whisper Tiny and OPUS English→French, enabled the app shell, disconnected the browser, reloaded, and successfully transcribed and translated speech. Larger models remain device-dependent. Models now use the app-specific `podlingua-models-v1` cache; older shared Transformers caches are not silently deleted or treated as verified downloads.
 
-### Listening instrument edition
+### Library, sync and publisher workflows
 
-The visual update adds original inline SVG icons, named collapsible tool groups, persistent skip controls, mobile 44px touch targets and larger mobile form text. Secondary tools no longer crowd the transcript.
-
-Connections now offers manual Nextcloud gpoddersync / gpodder API-v2 subscription and listening-action exchange with preview/apply and explicit uploads. Use a CORS-enabled server; no account is supplied and real account interoperability has not been live-verified. Private feed Basic authentication is tab-session-only and scoped to an exact HTTPS path or explicit directory. Credentialed redirects are rejected; authenticated audio must be downloaded before playback. No passwords are stored in settings or backups.
+Settings › Advanced › Sync offers manual Nextcloud gpoddersync / gpodder API-v2 subscription and listening-action exchange with preview/apply and explicit uploads. Use a CORS-enabled server; no account is supplied and real account interoperability has not been live-verified. Private feed Basic authentication is tab-session-only and scoped to an exact HTTPS path or explicit directory. Credentialed redirects are rejected; authenticated audio must be downloaded before playback. No passwords are stored in settings or backups.
 
 Publisher workflows include explicit feed-address migration retaining local identities, one-page-at-a-time archive loading, funding/social links, MediaRSS/Dublin Core fallback metadata, and ID3v2.3/v2.4 CHAP extraction from downloaded audio. Unsupported/corrupt tags fail explicitly; MP4/Vorbis chapters and embedded artwork extraction are not implemented.
 
-An original porcelain/ink/vermilion interface replaces the large introductory layout. The persistent transport stays available while browsing; mobile navigation, keyboard focus, dark mode and reduced motion are supported. Main-screen compatibility disclaimers are removed; attribution, consent and service requirements remain in Credits/settings.
+The persistent mini player stays available while browsing; dark mode, keyboard focus and reduced motion are supported. Attribution, consent and service requirements remain in Credits and Settings › Advanced.
 
 Additional tools: queue shuffle/lock/keep-sorted and insertion policies; title-based automatic-download filters and fresh-episode queue rules; local file/folder selection with content deduplication; measured per-show/daily statistics and separate history/statistics resets; fyyd search and website-advertised feed discovery. Downloaded audio can be analyzed locally for measured silence skipping and bounded quiet-audio gain. Gain playback is a temporary mono 16 kHz derivative, not destructive editing or broadcast loudness normalization; original recordings are retained.
 
@@ -90,10 +101,14 @@ Requires a recent Node.js version compatible with Vite 8 (Node 22.12+ / 24+ reco
 npm ci
 npm test
 npm run build
-npx playwright install chromium
-npm run test:ui
+npx playwright install chromium   # or set PLAYWRIGHT_CHROMIUM_PATH to an installed Chromium
+npm run test:ui                    # UI tests with mocked directories, feeds, media and providers
 npm run dev
 ```
+
+Real on-device inference through the UI (needs Hugging Face access and a speech WAV such as Whisper's JFK sample): `npm run build && npm run preview`, then `node scripts/local-inference-smoke.mjs jfk.wav [--offline] [--report out.json]`.
+
+Code map: domain logic (`src/*.js`: feeds, catalog, storage, engines, playback, parity, sync protocol) is UI-free and unit-tested. `src/services/` holds app state (store, prefs, jobs, player, library, offline, sync). `src/views/` renders each screen as escaped HTML patched in place with morphdom; `src/ui/` has the DOM helpers, icons and shared parts; `src/styles/app.css` is the single stylesheet.
 
 The site base is `/podlingua/` for GitHub project Pages. Build output is `dist/`; source and tests remain in this repository. `node scripts/collect-notices.mjs` regenerates installed dependency notices after a dependency change; review additional runtime/model terms too. No environment credentials are required to build.
 
