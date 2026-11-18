@@ -22,6 +22,8 @@ Bounds: 100 KiB streamed request limit, at most eight texts of 4,000 characters 
 
 Only validated translation strings are returned. Provider error bodies, cookies and private headers are discarded; a bounded Retry-After header is exposed for quota errors. No application code logs or stores keys, transcript bodies or provider responses. Sampled infrastructure traces remain enabled, query strings are redacted and invocation logs are disabled. Cloudflare and DeepL necessarily process the transfer. The UI discloses this and requires per-operation permission (or an explicit batch/word-lookup session confirmation). Test credentials are fixtures only; real account access, supported languages and remaining allowance must be checked by the user.
 
+Run `node scripts/translation-relay-live-smoke.mjs` to verify browser CORS from the actual Pages origin, relay health and upstream authentication rejection using an intentionally invalid dummy key. It uses no real credential and performs no billable translation. The local Node/Playwright suites separately verify successful translation with explicit response fixtures; do not describe those fixtures as live account validation.
+
 ## Retired Node deployment — historical reference only
 
 The Paloma relay was stopped and disabled, and its Funnel path removed. The app has no Paloma endpoint. The remaining sections document the **retired** `audio-relay.mjs`, not the active Cloudflare implementation or authorization to redeploy on personal infrastructure.
