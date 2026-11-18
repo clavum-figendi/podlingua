@@ -9,6 +9,7 @@ import {prefs, savePrefs, engineConfig, providers, providerOf, setProvider, getK
 import {player, media, load, removeBookmark} from '../services/player.js';
 import {episodeShare} from '../episode-sharing.js';
 import {fetchRelayAudio, supportsAudioRelay, AUDIO_RELAY_ENDPOINT} from '../audio-relay-client.js';
+import {needsDeepLRelay} from '../engines.js';
 
 const close = html`<button type="button" class="icon-btn sheet-close" data-act="sheet-close" aria-label="Close">${icon('close')}</button>`;
 const languageOptions = (value, withAuto) => html`${withAuto ? html`<option value="auto" ${value === 'auto' ? 'selected' : ''}>Detect</option>` : ''}${[...new Set([...LANGUAGES, value].filter(v => v && v !== 'auto'))].map(code => html`<option value="${code}" ${code === value ? 'selected' : ''}>${languageName(code)}</option>`)}`;
@@ -93,7 +94,7 @@ export function openProcess(id, kind = 'asr') {
   if (!e) return;
   const feedLanguage = String(feedOf(e)?.language || '').toLowerCase().split('-')[0];
   Object.assign(flow, {
-    id, kind,
+    id, kind, relayConsent: false,
     source: e.doc?.language && !['auto', 'unknown', 'und'].includes(e.doc.language) ? e.doc.language : prefs.source !== 'auto' ? prefs.source : LANGUAGES.includes(feedLanguage) ? feedLanguage : 'auto',
     target: prefs.target, translate: true,
     publisher: kind === 'asr' && !!e.transcripts?.length,
@@ -121,8 +122,9 @@ function renderProcess() {
   const needsAudio = flow.kind === 'asr' && !flow.publisher && !e.audio;
   const asrLocal = providerOf('asr').id === 'local', trLocal = providerOf('translation').id === 'local';
   const doTranslate = flow.kind === 'translate' || flow.translate;
+  const relayRequired = doTranslate && providerOf('translation').id === 'deepl' && needsDeepLRelay(prefs.translation.endpoint);
   const sourceMissing = doTranslate && trLocal && flow.source === 'auto' && !(flow.kind === 'translate' && e.doc?.language && !['auto', 'unknown', 'und'].includes(e.doc.language));
-  const blocked = (needsAudio && !e.audioUrl) || sourceMissing || (flow.kind === 'translate' && !e.doc);
+  const blocked = (needsAudio && !e.audioUrl) || sourceMissing || (flow.kind === 'translate' && !e.doc) || (relayRequired && !flow.relayConsent);
   const steps = [
     ...(needsAudio ? [['download', 'Get audio']] : []),
     ...(flow.kind === 'asr' ? [[flow.publisher ? 'transcript' : 'wave', flow.publisher ? 'Publisher transcript' : 'Transcribe']] : []),
@@ -131,6 +133,7 @@ function renderProcess() {
   const notices = [
     ...((flow.kind === 'asr' && !flow.publisher && asrLocal) || (doTranslate && trLocal) ? ['Downloads open models from Hugging Face the first time.'] : []),
     ...(flow.kind === 'asr' && !flow.publisher && !asrLocal ? [`Sends the audio to ${providerOf('asr').name}.`] : []),
+    ...(flow.kind === 'asr' && !flow.publisher && engineConfig('asr').diarization ? ['Speaker labels are requested; provider add-on charges may apply.'] : []),
     ...(doTranslate && !trLocal ? [`Sends the text to ${providerOf('translation').name}.`] : []),
   ];
   return html`${close}
@@ -148,6 +151,7 @@ function renderProcess() {
     </div>` : ''}
     ${flow.kind === 'asr' && !flow.publisher ? html`<h3 class="mini-heading">Transcribe on</h3>${engineChoice('asr')}` : ''}
     ${doTranslate ? html`<h3 class="mini-heading">Translate on</h3>${engineChoice('translation')}` : ''}
+    ${relayRequired ? html`<div class="callout"><strong>DeepL needs a browser relay</strong><p class="small">DeepL blocks direct browser calls. Podlingua's Cloudflare receives the text and your DeepL API key, forwards them only to DeepL, and does not store them. Your DeepL API allowance applies; no automatic retry or provider switch.</p><label class="check"><input type="checkbox" data-change="flow-relay-consent" ${flow.relayConsent ? 'checked' : ''}>Allow DeepL relay for this operation</label></div>` : ''}
     <ol class="pipeline" aria-label="Steps">${steps.map(([glyph, label]) => html`<li>${icon(glyph)}<span>${label}</span></li>`)}</ol>
     ${needsAudio && !e.audioUrl ? html`<button type="button" class="btn wide" data-act="sheet-attach" data-id="${e.id}">${icon('upload')}Attach audio file</button>` : ''}
     ${job ? html`<div class="job-line">${ring(job.status === 'running' ? job.progress : 0)}<span>${jobLabel(job)}${job.message ? ' · ' + job.message : ''}</span><button type="button" class="btn small ghost" data-act="job-cancel" data-id="${e.id}">Cancel</button></div>`
@@ -157,6 +161,8 @@ function renderProcess() {
 
 function processSteps(e) {
   const steps = [], doTranslate = flow.kind === 'translate' || flow.translate;
+  const relayRequired = doTranslate && providerOf('translation').id === 'deepl' && needsDeepLRelay(prefs.translation.endpoint);
+  if(relayRequired && !flow.relayConsent)throw new Error('Confirm permission for the DeepL Cloudflare relay first.');
   const source = flow.source;
   savePrefs({source: flow.source === 'auto' ? prefs.source : flow.source, target: flow.target});
   const cloud = kind => providerOf(kind).id !== 'local';
@@ -170,7 +176,7 @@ function processSteps(e) {
   }
   if (doTranslate) {
     const trSource = source === 'auto' ? e.doc?.language || 'auto' : source;
-    steps.push({kind: 'translate', config: engineConfig('translation', {source: trSource, target: flow.target, allowDownload: true, allowCloud: cloud('translation'), model: providerOf('translation').id === 'local' ? resolveLocalTranslationModel(trSource, flow.target) : undefined})});
+    steps.push({kind: 'translate', config: engineConfig('translation', {source: trSource, target: flow.target, allowTranslationRelay: relayRequired && flow.relayConsent, allowDownload: true, allowCloud: cloud('translation'), model: providerOf('translation').id === 'local' ? resolveLocalTranslationModel(trSource, flow.target) : undefined})});
   }
   return steps;
 }
@@ -324,8 +330,9 @@ on('change', {
   'flow-source': el => { flow.source = el.value; refreshSheet(); },
   'flow-target': el => { flow.target = el.value; if (flow.kind === 'asr') flow.translate = true; refreshSheet(); },
   'flow-words': el => { flow.publisher = el.value === 'publisher'; refreshSheet(); },
-  'flow-engine': el => { const kind = el.dataset.kind; setProvider(kind, el.value === 'local' ? 'local' : prefs[`${kind}Hosted`] || (kind === 'asr' ? 'groq' : 'deepl')); refreshSheet(); },
-  'flow-provider': el => { setProvider(el.dataset.kind, el.value); savePrefs({[`${el.dataset.kind}Hosted`]: el.value}); refreshSheet(); },
+  'flow-relay-consent': el => { flow.relayConsent = el.checked; refreshSheet(); },
+  'flow-engine': el => { const kind = el.dataset.kind; flow.relayConsent = false; setProvider(kind, el.value === 'local' ? 'local' : prefs[`${kind}Hosted`] || (kind === 'asr' ? 'groq' : 'deepl')); refreshSheet(); },
+  'flow-provider': el => { flow.relayConsent = false; setProvider(el.dataset.kind, el.value); savePrefs({[`${el.dataset.kind}Hosted`]: el.value}); refreshSheet(); },
   'share-time': el => { share.withTime = el.checked; refreshSheet(); },
 });
 on('input', {'flow-key': el => setKey(el.dataset.kind, el.value)});

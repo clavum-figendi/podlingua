@@ -72,7 +72,7 @@ These are conversion/upstream model cards, not hosted free-inference promises. W
 - `key`, `endpoint`, `model`, `source`, `target`, `region`: provider-specific configuration; never populate secrets from research or share saved credentials in public source code.
 - `diarization`: expose only where `diarization === true` (Deepgram, AssemblyAI, Gladia, Speechmatics). `serviceDiarization === true` alone is **not** enough.
 - `maxUploadMB`, `timeoutSeconds`: app budgets, not an exemption from provider caps and not a provider billing stop. Canceled local requests do not necessarily cancel a remote queued job.
-- `browserCors`: `unknown` means untested, **not supported**. DeepL is documented blocked; Ollama requires origin configuration. Never disable browser security or silently use a third-party proxy.
+- `browserCors`: `unknown` means untested, **not supported**. DeepL is documented blocked for direct browser calls; its official Free/Pro endpoints use the dedicated Podlingua Cloudflare relay only with explicit text/key-transfer permission (`allowTranslationRelay`). The relay has no shared key and stores no text/keys. A custom trusted compatible backend remains configurable. Ollama requires origin configuration. Never disable browser security or silently use a third-party proxy.
 - Treat every hosted upload as disclosure to that operator. Review retention, training, region, optional top-up and dashboard spending controls. No service in this catalog was exercised with a secret.
 
 ## Research limitations

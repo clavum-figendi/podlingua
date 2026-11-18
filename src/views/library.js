@@ -7,6 +7,7 @@ import * as library from '../services/library.js';
 import {enqueue} from '../services/jobs.js';
 import {engineConfig, providerOf, prefs, languageName} from '../services/prefs.js';
 import {load} from '../services/player.js';
+import {needsDeepLRelay} from '../engines.js';
 
 const TABS = [
   ['shows', 'library', 'Shows'], ['new', 'inbox', 'New'], ['queue', 'queue', 'Queue'], ['saved', 'saved', 'Saved'],
@@ -88,11 +89,12 @@ async function batch(kind) {
   const ids = store.episodes.filter(e => kind === 'asr' ? e.audio && !e.doc : e.doc && e.doc.targetLanguage !== prefs.target).map(e => e.id);
   if (!ids.length) return toast(kind === 'asr' ? 'Every saved episode has a transcript.' : 'Every transcript is already translated.');
   const p = providerOf(kind === 'asr' ? 'asr' : 'translation');
-  if (!await ask(`${kind === 'asr' ? 'Transcribe' : 'Translate'} ${ids.length} episodes?`, {detail: p.id === 'local' ? 'Runs on this device. Models download from Hugging Face the first time. Keep this tab open.' : `Sends ${kind === 'asr' ? 'audio' : 'text'} to ${p.name}. Charges may apply.`, confirm: 'Start'})) return;
+  const relayRequired = kind !== 'asr' && p.id === 'deepl' && needsDeepLRelay(prefs.translation.endpoint);
+  if (!await ask(`${kind === 'asr' ? 'Transcribe' : 'Translate'} ${ids.length} episodes?`, {detail: relayRequired ? "Sends transcript text and your DeepL API key through Podlingua's Cloudflare relay to DeepL for these episodes. The relay does not store them. Your API allowance applies; no automatic retry or provider switch." : p.id === 'local' ? 'Runs on this device. Models download from Hugging Face the first time. Keep this tab open.' : `Sends ${kind === 'asr' ? 'audio' : 'text'} to ${p.name}. Charges may apply.`, confirm: 'Start'})) return;
   closeSheet();
   for (const id of ids) {
     const e = store.byId.get(id), source = e.doc?.language && !['auto', 'unknown'].includes(e.doc.language) ? e.doc.language : prefs.source;
-    enqueue(id, e.title, [{kind: kind === 'asr' ? 'asr' : 'translate', config: engineConfig(kind === 'asr' ? 'asr' : 'translation', {source, allowDownload: true, allowCloud: p.id !== 'local'})}]);
+    enqueue(id, e.title, [{kind: kind === 'asr' ? 'asr' : 'translate', config: engineConfig(kind === 'asr' ? 'asr' : 'translation', {source, allowDownload: true, allowTranslationRelay: relayRequired, allowCloud: p.id !== 'local'})}]);
   }
 }
 

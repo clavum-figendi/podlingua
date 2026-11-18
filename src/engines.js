@@ -138,12 +138,18 @@ export async function translate(doc,config,opts={}) {
     operation.signal.throwIfAborted();
     if(c.provider==='local')local=localRunner(operation.signal,opts.onProgress);
     const translations=[];
-    for(let i=0;i<doc.segments.length;i+=c.provider==='mymemory'?1:8) {
+    for(let i=0;i<doc.segments.length;) {
       operation.signal.throwIfAborted();
       const batch=doc.segments.slice(i,i+(c.provider==='mymemory'?1:8)).map(s=>s.text);
       if(batch.some(t=>typeof t!=='string'||t.length>4000)) throw new Error('Translation segment exceeds 4000 characters. Split it first.');
-      const out=c.provider==='local' ? await local.run({task:'translate',texts:batch,source,target:c.target,model:c.model,offlineOnly:c.offlineOnly===true}) : parseTranslation(c.provider,await requestJSON(buildTranslationRequest({...c,source},batch),operation.signal),batch.length);
+      let request=c.provider==='local'?null:buildTranslationRequest({...c,source},batch);
+      if(c.provider==='deepl') {
+        while(new TextEncoder().encode(request.body).length>100*1024 && batch.length>1){batch.pop();request=buildTranslationRequest({...c,source},batch);}
+        if(new TextEncoder().encode(request.body).length>100*1024)throw new Error('DeepL translation request exceeds the 100 KiB byte limit. Split the text first.');
+      }
+      const out=c.provider==='local' ? await local.run({task:'translate',texts:batch,source,target:c.target,model:c.model,offlineOnly:c.offlineOnly===true}) : parseTranslation(c.provider,await requestJSON(request,operation.signal,undefined,c.name),batch.length);
       translations.push(...out);
+      i+=batch.length;
       opts.onProgress?.({status:'translating',progress:Math.round(translations.length/doc.segments.length*100)});
     }
     return {...doc,targetLanguage:c.target,translationProvider:c.provider,translationModel:c.model,segments:doc.segments.map((s,i)=>({...s,translation:translations[i]}))};
@@ -177,6 +183,10 @@ function parseSpeechmatics(data,offset) {
   if(!out.length)throw new Error('No timed transcript returned.');
   return out;
 }
+export function needsDeepLRelay(endpoint) {
+  try {return ['api-free.deepl.com','api.deepl.com'].includes(new URL(endpoint || translationProviders.find(p=>p.id==='deepl').endpoint).hostname);}
+  catch {return false;}
+}
 export function buildTranslationRequest(config,texts) {
   const c=providerConfig(config,translationProviders),id=c.provider;
   if(!Array.isArray(texts)||!texts.length||texts.length>8||texts.some(t=>typeof t!=='string'||t.length>4000))throw new Error('Invalid translation batch');
@@ -185,6 +195,13 @@ export function buildTranslationRequest(config,texts) {
   let body;
   const explicit=c.source && c.source!=='auto';
   if(id==='deepl') {
+    requiredKey(c);
+    const endpoint=safeEndpoint(url);
+    if(['api-free.deepl.com','api.deepl.com'].includes(endpoint.hostname)) {
+      if(endpoint.pathname!=='/v2/translate'||endpoint.search||endpoint.port)throw new Error('Use the official DeepL /v2/translate endpoint or your trusted compatible backend.');
+      if(c.allowTranslationRelay!==true)throw new Error('DeepL needs relay permission: it blocks direct browser calls. Confirm the Cloudflare text/key transfer in the translation dialog, use your trusted backend, or choose on-device translation.');
+      url=`https://podlingua-translation.clavum-figendi.workers.dev/deepl/${endpoint.hostname==='api-free.deepl.com'?'free':'pro'}`;
+    }
     headers.Authorization=`DeepL-Auth-Key ${c.key || ''}`;
     body={text:texts,target_lang:c.target.toUpperCase(),...(explicit?{source_lang:c.source.toUpperCase()}: {})};
   } else if(id==='google') {
@@ -248,11 +265,23 @@ function jobScope(config,signal) {
   const timer=setTimeout(()=>controller.abort(new DOMException('Operation timed out','TimeoutError')),seconds*1000);
   return {signal:controller.signal,close(){clearTimeout(timer);signal?.removeEventListener('abort',abort);}};
 }
-async function requestJSON(request,signal,maxBytes=8*1024*1024) {
+async function requestJSON(request,signal,maxBytes=8*1024*1024,provider='Provider') {
   safeEndpoint(request.url);
   signal?.throwIfAborted();
-  const response=await fetch(request.url,{...request,signal,redirect:'error',credentials:'omit',referrerPolicy:'no-referrer',cache:'no-store'});
-  if(!response.ok)throw new Error(`Provider request failed (HTTP ${response.status}). No automatic retry. Check CORS, credentials and provider limits.`);
+  let response;
+  try {response=await fetch(request.url,{...request,signal,redirect:'error',credentials:'omit',referrerPolicy:'no-referrer',cache:'no-store'});}
+  catch(error){if(signal?.aborted)throw signal.reason;if(error instanceof TypeError)throw new Error(`${provider} could not be reached. Check your connection and browser CORS support, use a trusted compatible backend, or select on-device translation. No automatic retry.`);throw error;}
+  if(!response.ok){
+    await response.body?.cancel();
+    if(response.status===429){
+      const raw=response.headers.get('Retry-After'), seconds=raw && /^\d+$/.test(raw)?Number(raw):raw?Math.ceil((Date.parse(raw)-Date.now())/1000):NaN;
+      const wait=Number.isFinite(seconds)&&seconds>0?seconds:null;
+      const error=new Error(`${provider} rejected the request (HTTP 429: rate limit or quota). ${wait?`Wait at least ${wait} seconds before trying again. `:''}Check your provider's API quota and rate limits, or choose on-device translation. No automatic retry, provider switch or purchase.`);
+      error.code='PROVIDER_RATE_LIMITED';error.retryAfterSeconds=wait;throw error;
+    }
+    if(response.status===456)throw new Error(`${provider} translation allowance is exhausted (HTTP 456). Check your API allowance or choose on-device translation. No automatic retry or purchase.`);
+    throw new Error(`${provider} request failed (HTTP ${response.status}). No automatic retry. Check credentials, endpoint and provider limits.`);
+  }
   const reader=response.body.getReader();const chunks=[];let total=0;
   try {
     while(true){const {done,value}=await reader.read();if(done)break;total+=value.byteLength;if(total>maxBytes)throw new Error('Provider response exceeds 8 MB limit');chunks.push(value);}

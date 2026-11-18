@@ -1,5 +1,14 @@
 # Verification record
 
+## DeepL browser transport, quota errors and speaker defaults (2026-11-18)
+
+- Official DeepL documentation and the reported console trace establish that direct browser requests are rejected. Added a restricted BYO-key Cloudflare translation Worker, explicit text/key-transfer permission in episode/batch/lookup paths, and guarded Free/Pro routing. No personal infrastructure or shared provider key is used.
+- Reproduced Mistral 429 handling with a transport fixture; errors now identify quota/rate-limit failure and expose Retry-After where available, without retrying, switching providers or altering the saved transcript. This cannot increase a provider account's quota.
+- Speaker labels default on only for integrated capable ASR adapters. Legacy settings adopt the requested new default once; subsequent explicit off choices persist. Unsupported adapters never claim diarization. Real speaker-identification quality and paid account interoperability were not tested.
+- Independent review found unbounded cancellation cleanup and a serialized-byte batching mismatch. Both were reproduced by failing regressions and corrected. Tests cover malicious destinations, origin/preflight policy, no cookies/redirects, bounded bodies, malformed responses, limiter failure, quota errors, stalled stream cancellation and escaped-byte batch splitting.
+- `npm test`: 127 passing Node tests. `npm run test:ui`: 10 passing production-build Chromium journeys, including DeepL consent/lookup/batch, visible Mistral errors with transcript retention, and supported-provider speaker defaults/opt-out. Provider traffic in these suites is mocked. Production build and Pages staging succeeded; `npm audit` reports zero registry findings (the prior local-vendor audit limitation still applies).
+- No real credentialed translation request or billable ASR call was made. Account entitlement, remaining API allowance and vendor billing caps must still be checked by the user. Real local model inference was not rerun in this change.
+
 ## Build dependency security mitigation (2026-11-18)
 
 - GHSA-fc5q-39xc-vjpf affects picomatch 4.0.7 and every published earlier version. No fixed npm release was available. npm's suggested Vite 6.2.7 downgrade introduces other known Vite vulnerabilities and was rejected.

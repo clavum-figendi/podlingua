@@ -1,4 +1,5 @@
 import {asrProviders, translationProviders} from '../engines.js';
+import {getProviderInfo} from '../provider-info.js';
 
 // Non-secret preferences persist in localStorage. API keys and cloud-transfer consent never leave memory.
 const KEY = 'podlingua-prefs-v2';
@@ -18,7 +19,7 @@ const defaults = () => ({
   asr: {provider: 'local', model: 'Xenova/whisper-tiny', endpoint: '', region: ''},
   translation: {provider: 'local', model: AUTO_MODEL, endpoint: '', region: ''},
   source: 'auto', target: browserLanguage,
-  maxUploadMB: 100, timeoutSeconds: 900, diarization: false, offlineOnly: false, allowDownload: false,
+  maxUploadMB: 100, timeoutSeconds: 900, diarization: true, speakerPreferenceVersion: 1, offlineOnly: false, allowDownload: false,
   reader: {layout: 'stacked', size: 20, timestamps: true, speakers: true, follow: true},
   onboarded: false,
 });
@@ -26,6 +27,9 @@ const defaults = () => ({
 function load() {
   try {
     const stored = JSON.parse(localStorage.getItem(KEY) || '{}'), base = defaults();
+    // Adopt the newly requested default for legacy v2 records, whose false was
+    // written even without a user choice. Subsequent opt-outs retain version 1.
+    if(stored.speakerPreferenceVersion !== 1){stored.diarization = true; stored.speakerPreferenceVersion = 1;}
     return {...base, ...stored, asr: {...base.asr, ...stored.asr}, translation: {...base.translation, ...stored.translation}, reader: {...base.reader, ...stored.reader}};
   } catch { return defaults(); }
 }
@@ -66,11 +70,14 @@ export function resolveLocalTranslationModel(source, target, chosen = prefs.tran
 export function engineConfig(kind, overrides = {}) {
   const p = prefs[kind], source = overrides.source ?? prefs.source, target = overrides.target ?? prefs.target;
   const model = p.provider === 'local' && kind === 'translation' ? resolveLocalTranslationModel(source, target) : p.model;
-  return {
+  const config = {
     provider: p.provider, model, endpoint: p.endpoint, region: p.region, key: secrets[kind], source, target,
     allowCloud: session.allowCloud, allowDownload: prefs.allowDownload, offlineOnly: prefs.offlineOnly,
     maxUploadMB: prefs.maxUploadMB, timeoutSeconds: prefs.timeoutSeconds, diarization: prefs.diarization, ...overrides,
   };
+  const info = getProviderInfo(kind, config.provider);
+  config.diarization = kind === 'asr' && info?.integration === 'integrated' && info?.diarization === true && config.diarization === true;
+  return config;
 }
 
 const names = (() => { try { return new Intl.DisplayNames([globalThis.navigator?.language || 'en'], {type: 'language'}); } catch { return null; } })();

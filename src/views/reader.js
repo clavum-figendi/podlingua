@@ -7,7 +7,7 @@ import {prefs, savePrefs, engineConfig, providerOf, languageName} from '../servi
 import {activeJob, failedJob, jobLabel} from '../services/jobs.js';
 import {player, media, current, seek, setRate, setSleep, sleepRemaining, markLoop, clearLoop, addBookmark, analyzeClarity, setClarity, next, pictureInPicture} from '../services/player.js';
 import {activeSegments, tokenize, exportTranscript} from '../core.js';
-import {lookup} from '../engines.js';
+import {lookup, needsDeepLRelay} from '../engines.js';
 import * as library from '../services/library.js';
 
 const ui = {search: false, q: '', follow: true, scrubbing: false, lookup: null, lookupConsent: false, chapters: null, chaptersFor: ''};
@@ -178,13 +178,15 @@ function stopFollowing() {
 for (const type of ['wheel', 'touchmove']) document.addEventListener(type, e => { if (e.target.closest?.('#transcript')) stopFollowing(); }, {passive: true});
 
 /* ---------- Word lookup ---------- */
+const lookupConsentToken = () => JSON.stringify(prefs.translation);
 function lookupBubble() {
   const l = ui.lookup, p = providerOf('translation');
-  const needsConsent = !ui.lookupConsent;
+  const needsConsent = ui.lookupConsent !== lookupConsentToken();
+  const relayRequired = p.id === 'deepl' && needsDeepLRelay(prefs.translation.endpoint);
   return html`<div class="bubble" style="top:${l.top}px;left:${l.left}px" role="dialog" aria-label="Look up ${l.word}">
     <div class="bubble-head"><strong lang="${l.source}">${l.word}</strong>${iconBtn('close', 'Close', 'lookup-close')}</div>
     <p class="muted small">${languageName(l.source)} → ${languageName(l.target)}</p>
-    ${needsConsent ? html`<p class="small">${p.id === 'local' ? 'Uses the on-device translator (model downloads once).' : `Sends the word to ${p.name}.`}</p><button type="button" class="btn primary small" data-act="lookup-allow">${icon('translate')}Translate</button>`
+    ${needsConsent ? html`<p class="small">${relayRequired ? "Sends words and your DeepL API key through Podlingua's Cloudflare relay to DeepL for this session. The relay does not store them. Your DeepL API allowance applies." : p.id === 'local' ? 'Uses the on-device translator (model downloads once).' : `Sends the word to ${p.name}.`}</p><button type="button" class="btn primary small" data-act="lookup-allow">${icon('translate')}Translate</button>`
       : l.result === null ? html`<p>${ring(null)}</p>` : html`<p class="bubble-result" lang="${l.target}">${l.result}</p>${p.id === 'google' ? html`<small>Google Translate</small>` : ''}`}
     ${l.at !== null ? html`<button type="button" class="btn ghost small" data-act="seek" data-at="${l.at}">${icon('play')}Play from here</button>` : ''}
     <small class="fineprint">Machine translation, not a dictionary.</small>
@@ -193,12 +195,12 @@ function lookupBubble() {
 let lookupController = null;
 async function runLookup() {
   const l = ui.lookup;
-  if (!l || !ui.lookupConsent) return;
+  if (!l || ui.lookupConsent !== lookupConsentToken()) return;
   lookupController?.abort();
   lookupController = new AbortController();
   const signal = lookupController.signal;
   try {
-    const config = engineConfig('translation', {source: l.source, target: l.target, allowDownload: true, allowCloud: providerOf('translation').id !== 'local'});
+    const config = engineConfig('translation', {source: l.source, target: l.target, allowDownload: true, allowTranslationRelay: providerOf('translation').id === 'deepl' && needsDeepLRelay(prefs.translation.endpoint), allowCloud: providerOf('translation').id !== 'local'});
     const value = await lookup(l.word, l.source, l.target, config, {signal});
     if (ui.lookup === l) l.result = value;
   } catch (error) { if (ui.lookup === l && !signal.aborted) l.result = error.message; }
@@ -276,7 +278,7 @@ on('click', {
   'reader-export': el => { const e = current(), f = el.dataset.format; downloadBlob(new Blob([exportTranscript(e.doc, f)], {type: f === 'json' ? 'application/json' : 'text/plain;charset=utf-8'}), `${e.title}.${f === 'text' ? 'txt' : f}`); closeSheet(); },
   async 'reader-import'(el) { const [file] = await pickFiles({accept: '.json,.srt,.vtt'}); if (!file) return; await library.importTranscript(file, el.dataset.id); closeSheet(); toast('Transcript added'); },
   'lookup-close': () => { ui.lookup = null; lookupController?.abort(); window.dispatchEvent(new Event('podlingua:render')); },
-  'lookup-allow': () => { ui.lookupConsent = true; window.dispatchEvent(new Event('podlingua:render')); runLookup(); },
+  'lookup-allow': () => { ui.lookupConsent = lookupConsentToken(); window.dispatchEvent(new Event('podlingua:render')); runLookup(); },
 });
 on('input', {
   scrub: el => { ui.scrubbing = true; seek(Number(el.value)); clearTimeout(ui.scrubTimer); ui.scrubTimer = setTimeout(() => { ui.scrubbing = false; }, 300); },

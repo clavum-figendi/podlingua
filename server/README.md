@@ -12,6 +12,16 @@ Audio is streamed, not stored or sent to AI. Sampled Cloudflare request logs/tra
 
 Verification: Node contract tests, live Cloudflare retrieval of the actual GAG581 recording, deployed-source hash comparison, and browser integration. Use `node scripts/relay-live-smoke.mjs` for the real publisher flow (downloads a full public recording; do not run in tight loops).
 
+## DeepL translation relay
+
+`cloudflare-translation.mjs` is a **separate** Worker named `podlingua-translation` in the same dedicated Podlingua account. Upload it as `worker.mjs` with `cloudflare-translation-metadata.json`; enable only the production workers.dev URL. No account upgrade, paid add-on or personal-server connection is needed. Do not put a shared provider key into a Worker secret: callers supply their own session-only DeepL key.
+
+`POST /deepl/free` and `/deepl/pro` call only `https://api-free.deepl.com/v2/translate` and `https://api.deepl.com/v2/translate`, respectively. Requests require the exact Pages Origin, JSON and a DeepL Authorization header. Origin is not authentication; the caller's DeepL key authenticates upstream. The CORS preflight allows only POST, Content-Type and Authorization; no cookies are forwarded. Redirects are never followed and no caller-selected destination, model, URL or arbitrary provider payload is accepted.
+
+Bounds: 100 KiB streamed request limit, at most eight texts of 4,000 characters each, fixed source/target-language fields, 256 KiB streamed response limit, and a 60-second request/upstream deadline. A mandatory Cloudflare rate limiter admits at most 60 requests per IP per minute on a distributed/best-effort basis. Missing/failing limiter bindings fail closed. Worker platform limits and the user's own DeepL allowance remain separate; these are not provider-side billing caps. Rejections are not automatically retried.
+
+Only validated translation strings are returned. Provider error bodies, cookies and private headers are discarded; a bounded Retry-After header is exposed for quota errors. No application code logs or stores keys, transcript bodies or provider responses. Sampled infrastructure traces remain enabled, query strings are redacted and invocation logs are disabled. Cloudflare and DeepL necessarily process the transfer. The UI discloses this and requires per-operation permission (or an explicit batch/word-lookup session confirmation). Test credentials are fixtures only; real account access, supported languages and remaining allowance must be checked by the user.
+
 ## Retired Node deployment — historical reference only
 
 The Paloma relay was stopped and disabled, and its Funnel path removed. The app has no Paloma endpoint. The remaining sections document the **retired** `audio-relay.mjs`, not the active Cloudflare implementation or authorization to redeploy on personal infrastructure.

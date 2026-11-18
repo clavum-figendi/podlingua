@@ -45,7 +45,7 @@ function engine(kind) {
         ${field('Endpoint', html`<input type="url" value="${prefs[kind].endpoint}" data-change="set-engine" data-kind="${kind}" data-key="endpoint" spellcheck="false">`)}
         ${field('API key', html`<input type="password" autocomplete="off" value="${getKey(kind)}" data-input="set-key" data-kind="${kind}">`, 'Kept in memory until you reload. Never saved or exported.')}
         ${p.id === 'microsoft' ? field('Region', html`<input value="${prefs[kind].region}" data-change="set-engine" data-kind="${kind}" data-key="region">`) : ''}`}
-    ${kind === 'asr' ? toggle('set-diarization', prefs.diarization && !!info?.diarization, 'Label speakers', info?.diarization ? 'Separates voices, not identities.' : 'Not available with this service.') : ''}
+    ${kind === 'asr' ? toggle('set-diarization', prefs.diarization && !!info?.diarization, 'Label speakers', info?.diarization ? 'On by default. Separates voices, not identities. Provider add-on charges may apply.' : 'Not available with this service.') : ''}
     ${info ? html`<details class="fine"><summary>Privacy & limits</summary><p>${info.privacy}</p><p>${info.limitations}</p>${info.sources.map(src => html`<a href="${src.url}" target="_blank" rel="noopener noreferrer">${src.title}</a>`)}</details>` : ''}`;
 }
 

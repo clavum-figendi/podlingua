@@ -1,0 +1,7 @@
+{
+  "main_module": "worker.mjs",
+  "compatibility_date": "2026-11-18",
+  "bindings": [{"type":"ratelimit","name":"RATE_LIMITER","namespace_id":"1002","simple":{"limit":60,"period":60}}],
+  "observability": {"enabled":true,"head_sampling_rate":0.01,"redact_query_string":true,"logs":{"enabled":true,"invocation_logs":false},"traces":{"enabled":true,"head_sampling_rate":0.01}},
+  "logpush": false
+}
